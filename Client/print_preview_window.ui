@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PrintPreviewWindow</class>
+ <widget class="QDialog" name="PrintPreviewWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>740</width><height>820</height></rect>
+  </property>
+  <property name="windowTitle"><string>Print Preview</string></property>
+  <property name="minimumSize"><size><width>640</width><height>700</height></size></property>
+  <property name="styleSheet">
+   <string notr="true">
+QDialog#PrintPreviewWindow, QWidget {
+    background-color: white;
+    color: #222;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollBar:vertical {
+    background: #f0f0f0;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #0077ff;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QLabel#label_title {
+    color: #222;
+    font-size: 16px;
+    font-weight: bold;
+}
+QLabel#label_pages {
+    color: #666;
+    font-size: 11px;
+}
+QFrame#line_sep1, QFrame#line_sep2, QFrame#line_sep3 {
+    color: #ccc;
+}
+QGroupBox#group_printer {
+    color: #0077ff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 10px 8px 8px 8px;
+}
+QGroupBox#group_printer::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+    color: #0077ff;
+}
+QRadioButton {
+    color: #333;
+    font-size: 12px;
+    spacing: 6px;
+}
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+}
+QRadioButton::indicator:checked {
+    background: #0077ff;
+    border-radius: 8px;
+    border: 2px solid #3399ff;
+}
+QRadioButton::indicator:unchecked {
+    background: #f0f0f0;
+    border-radius: 8px;
+    border: 2px solid #ccc;
+}
+QComboBox {
+    background: #f8fbff;
+    color: #222;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+QComboBox QAbstractItemView {
+    background: white;
+    color: #222;
+    selection-background-color: #0077ff;
+    border: 1px solid #ccc;
+}
+QLineEdit {
+    background: #f8fbff;
+    color: #222;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+QLineEdit:disabled {
+    color: #aaa;
+    background: #f0f0f0;
+}
+QLabel#label_port {
+    color: #555;
+    font-size: 12px;
+}
+QPushButton#btn_print {
+    background-color: #0077ff;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton#btn_print:hover {
+    background-color: #3399ff;
+}
+QPushButton#btn_print:pressed {
+    background-color: #0055cc;
+}
+QPushButton#btn_print:disabled {
+    background-color: #ccc;
+    color: #888;
+}
+QPushButton#btn_close {
+    background-color: #e6f2ff;
+    color: #0077ff;
+    border: 1px solid #d0e3ff;
+    border-radius: 10px;
+    font-size: 13px;
+}
+QPushButton#btn_close:hover {
+    background-color: #cce6ff;
+}
+QScrollArea QFrame {
+    background: #f8fbff;
+    border: 1px solid #d0e3ff;
+    border-radius: 6px;
+}
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <property name="spacing"><number>12</number></property>
+   <property name="leftMargin"><number>20</number></property>
+   <property name="topMargin"><number>18</number></property>
+   <property name="rightMargin"><number>20</number></property>
+   <property name="bottomMargin"><number>18</number></property>
+   <!-- ── Header ──────────────────────────────────── -->
+   <item>
+    <layout class="QHBoxLayout" name="hdr_layout">
+     <item>
+      <layout class="QVBoxLayout" name="hdr_col">
+       <property name="spacing"><number>2</number></property>
+       <item>
+        <widget class="QLabel" name="label_title">
+         <property name="text"><string>Preview</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_pages">
+         <property name="text"><string>Loading pages…</string></property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <!-- ── Separator ──────────────────────────────── -->
+   <item>
+    <widget class="QFrame" name="line_sep1">
+     <property name="frameShape"><enum>QFrame::HLine</enum></property>
+     <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+    </widget>
+   </item>
+   <!-- ── PDF page scroll area ───────────────────── -->
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <widget class="QWidget" name="scroll_content">
+      <property name="geometry">
+        <rect><x>0</x><y>0</y><width>700</width><height>480</height></rect>
+      </property>
+      <layout class="QVBoxLayout" name="pages_layout">
+       <property name="spacing"><number>12</number></property>
+       <item>
+        <spacer name="pages_spacer">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <!-- ── Separator ──────────────────────────────── -->
+   <item>
+    <widget class="QFrame" name="line_sep2">
+     <property name="frameShape"><enum>QFrame::HLine</enum></property>
+     <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+    </widget>
+   </item>
+   <!-- ── Printer Selection Group ────────────────── -->
+    <item>
+     <widget class="QGroupBox" name="group_printer">
+      <property name="title"><string>Select Printer</string></property>
+      <layout class="QVBoxLayout" name="printer_vbox">
+       <property name="spacing"><number>10</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="win_row">
+         <item>
+          <widget class="QRadioButton" name="radio_windows">
+           <property name="text"><string>Windows Printer:</string></property>
+           <property name="checked"><bool>true</bool></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="combo_printers">
+           <property name="minimumWidth"><number>220</number></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="net_row">
+         <item>
+          <widget class="QRadioButton" name="radio_network">
+           <property name="text"><string>Network Printer:</string></property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="net_vbox">
+            <item>
+             <layout class="QHBoxLayout" name="scan_sub_row">
+              <item>
+               <widget class="QComboBox" name="combo_network_printers">
+                <property name="enabled"><bool>false</bool></property>
+                <property name="minimumWidth"><number>180</number></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_scan">
+                <property name="text"><string>Scan Network</string></property>
+                <property name="enabled"><bool>false</bool></property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="manual_sub_row">
+              <item>
+               <widget class="QLabel" name="label_or">
+                <property name="text"><string>Or Manual IP:</string></property>
+                <property name="styleSheet"><string notr="true">font-size: 10px; color: #777;</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="input_manual_ip">
+                <property name="enabled"><bool>false</bool></property>
+                <property name="text"><string></string></property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   <!-- ── Separator ──────────────────────────────── -->
+   <item>
+    <widget class="QFrame" name="line_sep3">
+     <property name="frameShape"><enum>QFrame::HLine</enum></property>
+     <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+    </widget>
+   </item>
+   <!-- ── Button row ─────────────────────────────── -->
+   <item>
+    <layout class="QHBoxLayout" name="btn_row">
+     <item>
+      <spacer name="btn_spacer">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="text"><string>Close</string></property>
+       <property name="minimumSize"><size><width>110</width><height>38</height></size></property>
+       <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_print">
+       <property name="text"><string>Print</string></property>
+       <property name="minimumSize"><size><width>120</width><height>38</height></size></property>
+       <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+       <property name="default"><bool>true</bool></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
