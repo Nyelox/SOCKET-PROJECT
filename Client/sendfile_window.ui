@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SendFileWindow</class>
+ <widget class="QMainWindow" name="SendFileWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>900</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>CloudDrop — Send Files</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">
+QWidget#centralwidget {
+    background-color: #f8faff;
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+}
+QGroupBox {
+    background-color: white;
+    border: 1px solid #e1e9f5;
+    border-radius: 12px;
+    margin-top: 15px;
+    padding-top: 15px;
+    font-weight: bold;
+    color: #444;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 15px;
+    padding: 0 5px;
+}
+QLabel {
+    color: #555;
+    font-weight: 500;
+}
+QLineEdit, QSpinBox, QListWidget {
+    background-color: white;
+    border: 1px solid #dce4ec;
+    border-radius: 6px;
+    padding: 8px;
+    color: #333;
+    font-size: 13px;
+}
+QLineEdit:focus, QSpinBox:focus, QListWidget:focus {
+    border: 2px solid #0077ff;
+}
+QPushButton {
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 13px;
+}
+QPushButton#btn_send, QPushButton#btn_download, QPushButton#btn_select {
+    background-color: #0077ff;
+    color: white;
+    border: none;
+}
+QPushButton#btn_send:hover, QPushButton#btn_download:hover, QPushButton#btn_select:hover {
+    background-color: #0056cc;
+}
+QPushButton#btn_send:disabled {
+    background-color: #a0c4ff;
+}
+QPushButton#btn_refresh {
+    background-color: #f0f7ff;
+    color: #0077ff;
+    border: 1px solid #d0e3ff;
+}
+QPushButton#btn_refresh:hover {
+    background-color: #e0f0ff;
+}
+QPushButton#btn_back {
+    background-color: #f0f7ff;
+    color: #0077ff;
+    border: 1px solid #d0e3ff;
+}
+QPushButton#btn_back:hover {
+    background-color: #e0f0ff;
+}
+QListWidget::item {
+    padding: 10px;
+    border-bottom: 1px solid #f0f4f8;
+}
+QListWidget::item:selected {
+    background-color: #eef3ff;
+    color: #0077ff;
+}
+</string>
+   </property>
+   <layout class="QVBoxLayout" name="mainLayout">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>20</number>
+    </property>
+    <property name="topMargin">
+     <number>20</number>
+    </property>
+    <property name="rightMargin">
+     <number>20</number>
+    </property>
+    <property name="bottomMargin">
+     <number>20</number>
+    </property>
+    <item>
+     <layout class="QHBoxLayout" name="layout_back">
+      <item>
+       <widget class="QPushButton" name="btn_back">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>← Back</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="back_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QLabel" name="label_current_user">
+      <property name="styleSheet">
+       <string notr="true">font-size: 14px; color: #0077ff; font-weight: bold;</string>
+      </property>
+      <property name="text">
+       <string>Connected as: דניאל</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="group_send">
+      <property name="title">
+       <string>Send New File</string>
+      </property>
+      <layout class="QGridLayout" name="layout_send">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_receiver">
+         <property name="text">
+          <string>Recipients:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="input_receivers">
+         <property name="placeholderText">
+          <string>Enter usernames separated by commas (e.g. User1, User2)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QLabel" name="label_minutes">
+         <property name="text">
+          <string>Expires In:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="3">
+        <widget class="QSpinBox" name="spin_minutes">
+         <property name="suffix">
+          <string> min</string>
+         </property>
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>1440</number>
+         </property>
+         <property name="value">
+          <number>10</number>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_msg">
+         <property name="text">
+          <string>Message:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="input_file_message">
+         <property name="placeholderText">
+          <string>Optional message...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QLabel" name="label_max_dl">
+         <property name="text">
+          <string>Max Downloads:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="3">
+        <widget class="QSpinBox" name="spin_downloads">
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>100</number>
+         </property>
+         <property name="value">
+          <number>1</number>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QPushButton" name="btn_select">
+         <property name="text">
+          <string>Select File</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLabel" name="lbl_file">
+         <property name="styleSheet">
+          <string notr="true">color: #666; font-style: italic;</string>
+         </property>
+         <property name="text">
+          <string>No file selected</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="2" colspan="2">
+        <widget class="QPushButton" name="btn_send">
+         <property name="minimumSize">
+          <size>
+           <width>150</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>Send</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="group_incoming">
+      <property name="title">
+       <string>Received Files</string>
+      </property>
+      <layout class="QVBoxLayout" name="layout_incoming_v">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <item>
+        <layout class="QHBoxLayout" name="layout_filter_h">
+         <item>
+          <widget class="QLineEdit" name="input_filter">
+           <property name="placeholderText">
+            <string>Search files by name or sender...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_refresh">
+           <property name="text">
+            <string>Refresh</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QListWidget" name="list_incoming">
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_download">
+         <property name="text">
+          <string>Download Selected File</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

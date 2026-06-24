@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudDrop — הכנה להגנה על הפרויקט</title>
+<style>
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f4f7fb;
+    color: #222;
+    line-height: 1.7;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  h1 { color: #0056cc; border-bottom: 3px solid #0077ff; padding-bottom: 10px; }
+  h2 {
+    color: #fff; background: #0077ff;
+    padding: 10px 16px; border-radius: 8px; margin-top: 34px;
+  }
+  .q {
+    background: #fff; border: 1px solid #d0e3ff; border-right: 5px solid #0077ff;
+    border-radius: 8px; padding: 14px 18px; margin: 16px 0;
+  }
+  .q .question { font-weight: bold; color: #0056cc; font-size: 1.08em; }
+  .q .answer { margin-top: 8px; }
+  .tip {
+    background: #fff8e1; border: 1px solid #ffe082; border-right: 5px solid #ffb300;
+    border-radius: 8px; padding: 12px 16px; margin: 16px 0;
+  }
+  pre {
+    direction: ltr; text-align: left;
+    background: #1e1e2e; color: #e0e0e0;
+    padding: 12px 16px; border-radius: 8px; overflow-x: auto;
+    font-family: Consolas, "Courier New", monospace; font-size: 13px;
+  }
+  code { background: #eef3ff; color: #0056cc; padding: 1px 6px; border-radius: 4px;
+         direction: ltr; display: inline-block; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; background:#fff; }
+  th, td { border: 1px solid #d0e3ff; padding: 8px 12px; text-align: right; }
+  th { background: #eaf2ff; color: #0056cc; }
+  .toc { background:#fff; border:1px solid #d0e3ff; border-radius:8px; padding:14px 22px; }
+  .toc a { color:#0077ff; text-decoration:none; }
+  .toc a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<h1>🛡️ CloudDrop — שאלות הגנה ותשובות</h1>
+<p>מסמך הכנה להגנה על הפרויקט. כל תשובה קשורה ישירות לקוד שלך. הקטעים בקוד מוצגים משמאל‑לימין כמו שצריך.</p>
+
+<div class="toc">
+<b>תוכן עניינים:</b><br>
+1. <a href="#sockets">תקשורת וסוקטים</a> &nbsp;|&nbsp;
+2. <a href="#crypto">הצפנה ואבטחה</a> &nbsp;|&nbsp;
+3. <a href="#threads">תהליכונים (Threads)</a> &nbsp;|&nbsp;
+4. <a href="#oop">תכנות מונחה עצמים</a> &nbsp;|&nbsp;
+5. <a href="#db">בסיס נתונים</a> &nbsp;|&nbsp;
+6. <a href="#arch">ארכיטקטורה וזרימה</a> &nbsp;|&nbsp;
+7. <a href="#traps">שאלות מלכודת</a>
+</div>
+
+<!-- ============ SOCKETS ============ -->
+<h2 id="sockets">1. תקשורת וסוקטים 🔌</h2>
+
+<div class="q">
+  <div class="question">ש: איך השרת והלקוח מתקשרים?</div>
+  <div class="answer">בניתי <b>שרת TCP מבוסס סוקטים</b> בעזרת מודול <code>socket</code> של פייתון. הלקוח פותח חיבור לשרת, שולח בקשה ומקבל תשובה. מעל זה יש שכבת הצפנה היברידית (RSA+AES).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: TCP או UDP? למה?</div>
+  <div class="answer"><b>TCP.</b> הוא מבטיח שכל הנתונים יגיעו, בשלמותם ובסדר הנכון — קריטי לקבצים (אם חצי PDF נאבד הוא לא ייפתח). זה נקבע בקוד:
+  <pre>server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)</pre>
+  <code>AF_INET</code> = IPv4, <code>SOCK_STREAM</code> = TCP. (אם היה <code>SOCK_DGRAM</code> זה היה UDP — "יורה ושוכח", בלי הבטחת הגעה.)</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: איך השרת מטפל בכמה לקוחות בו זמנית?</div>
+  <div class="answer">לולאת השרת מקבלת חיבורים עם <code>accept()</code>, ולכל לקוח שמתחבר פותחת <b>Thread נפרד</b>. כך כמה לקוחות עובדים במקביל בלי לחסום זה את זה — זו הדרישה "שרת מרובה לקוחות".
+  <pre>while True:
+    client_sock, addr = server_sock.accept()   # ממתין ללקוח
+    t = threading.Thread(target=handle_client,
+                         args=(client_sock, addr), daemon=True)
+    t.start()</pre></div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה הפרוטוקול שתכננת? איך אתה יודע איפה הודעה נגמרת?</div>
+  <div class="answer">תכננתי פרוטוקול משלי: <b>כל הודעה = 4 בתים שמציינים את האורך + גוף ב‑JSON</b>. זה נחוץ כי TCP הוא <b>זרם (stream)</b> רציף בלי "גבולות הודעה" — בלי כותרת האורך הצד השני לא יודע איפה הודעה נגמרת והבאה מתחילה. קוראים קודם 4 בתים, יודעים את האורך N, ואז קוראים בדיוק N בתים.
+  <pre>def send_message(sock, obj):
+    body = json.dumps(obj).encode("utf-8")
+    header = struct.pack(">I", len(body))  # אורך כ-4 בתים
+    sock.sendall(header + body)</pre>
+  הגוף הוא <code>{"command": "login", "data": {...}}</code>.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה ההבדל בין הסוקט בצד השרת לסוקט בצד הלקוח?</div>
+  <div class="answer"><b>שרת:</b> <code>bind()</code> (תופס כתובת+פורט) → <code>listen()</code> (מתחיל להאזין) → <code>accept()</code> (מקבל לקוח). <b>לקוח:</b> רק <code>connect()</code> (מתחבר לכתובת+פורט של השרת).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה פורט, ומה המשמעות של 0.0.0.0?</div>
+  <div class="answer"><b>פורט</b> = מספר (אצלי 5000) שמזהה איזו אפליקציה במחשב מקבלת את החיבור. <b><code>0.0.0.0</code></b> אומר לשרת להאזין בכל כרטיסי הרשת — כך גם מחשבים אחרים ברשת יכולים להתחבר, ולא רק המחשב המקומי (שזה <code>127.0.0.1</code>).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: כמה גדולה הודעה הפרוטוקול תומך?</div>
+  <div class="answer">כותרת האורך היא 4 בתים (<code>">I"</code> = unsigned int), כלומר עד 2³² ≈ <b>4 ג'יגה‑בייט</b> להודעה. הקבצים מוגבלים ל‑50MB, אז בשפע.</div>
+</div>
+
+<!-- ============ CRYPTO ============ -->
+<h2 id="crypto">2. הצפנה ואבטחה 🔐</h2>
+
+<div class="q">
+  <div class="question">ש: תסביר את ההצפנה ההיברידית. למה גם RSA וגם AES?</div>
+  <div class="answer">משלבים את היתרונות של שתיהן:
+  <ul>
+    <li><b>RSA</b> (א‑סימטרי, מפתח ציבורי+פרטי) — בטוח להחלפת מפתח דרך רשת פתוחה, אבל <b>איטי</b> ולא מתאים לכמויות מידע גדולות.</li>
+    <li><b>AES</b> (סימטרי, מפתח אחד) — <b>מהיר מאוד</b>, אבל צריך דרך בטוחה להעביר את המפתח.</li>
+  </ul>
+  הפתרון: משתמשים ב‑RSA <b>רק כדי להעביר את מפתח ה‑AES</b> בבטחה, ואז מצפינים את כל המידע עצמו עם AES המהיר.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: תאר את "לחיצת היד" (handshake) בתחילת חיבור.</div>
+  <div class="answer">
+  1. הלקוח מבקש מהשרת את <b>המפתח הציבורי RSA</b> (פקודה <code>public_key</code>).<br>
+  2. הלקוח מייצר <b>מפתח AES</b> אקראי, מצפין אותו עם המפתח הציבורי של השרת, ושולח (פקודה <code>session_key</code>).<br>
+  3. השרת מפענח את מפתח ה‑AES עם <b>המפתח הפרטי</b> שלו ושומר אותו תחת <code>session_token</code>.<br>
+  4. מכאן, נתונים רגישים (סיסמה בהתחברות) מוצפנים ב‑AES עם המפתח המשותף.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: איך נשמרות הסיסמאות בבסיס הנתונים? למה לא הצפנה?</div>
+  <div class="answer">הסיסמאות נשמרות כ‑<b>hash עם bcrypt</b>, לא בהצפנה ולא בטקסט גלוי. ההבדל: הצפנה הפיכה (אפשר לפענח), אבל <b>hash הוא חד‑כיווני</b> — אי אפשר לשחזר ממנו את הסיסמה. בהתחברות משווים את ה‑hash של מה שהוקלד ל‑hash השמור. גם אם מישהו גונב את ה‑DB, הוא לא מקבל את הסיסמאות. ל‑bcrypt יש גם <b>salt</b> מובנה — ערך אקראי שמתווסף לכל סיסמה כך ששתי סיסמאות זהות ייתנו hash שונה, ומונע מתקפות "טבלת קשת" (rainbow table).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: אילו פרצות אבטחה טיפלת בהן? (דרישת חובה!)</div>
+  <div class="answer">
+  <ul>
+    <li><b>SQL Injection</b> — כל השאילתות משתמשות ב‑<b>parameterized queries</b> (עם <code>%s</code>), כך שקלט המשתמש אף פעם לא מתערבב עם פקודת ה‑SQL.</li>
+    <li><b>סיסמאות</b> — hash עם bcrypt + salt (לא נשמרות גלוי).</li>
+    <li><b>הצפנת תקשורת</b> — RSA+AES על המידע הרגיש.</li>
+    <li><b>הגבלת גודל קובץ</b> — תקרה כדי למנוע מתקפת מיצוי זיכרון.</li>
+    <li><b>תפוגת קבצים + הגבלת הורדות</b> — קובץ נמחק אחרי זמן/מספר הורדות.</li>
+    <li><b>בקרת הרשאות</b> — פעולות אדמין בודקות <code>is_admin</code> לפני ביצוע.</li>
+  </ul></div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה SQL Injection ואיך מנעת אותו? תן דוגמה.</div>
+  <div class="answer">זו מתקפה שבה תוקף מכניס קוד SQL לתוך שדה קלט. אם הייתי בונה שאילתה עם חיבור מחרוזות (<code>"... WHERE user='" + name + "'"</code>), מישהו יכול להקליד <code>' OR '1'='1</code> ולעקוף. במקום, אני מעביר ערכים בנפרד והספרייה "מנקה" אותם:
+  <pre>cur.execute("SELECT username FROM data WHERE username=%s", (rcv,))</pre>
+  ה‑<code>%s</code> הוא placeholder — הערך לעולם לא מתפרש כקוד SQL.</div>
+</div>
+
+<!-- ============ THREADS ============ -->
+<h2 id="threads">3. תהליכונים (Threads) 🧵</h2>
+
+<div class="q">
+  <div class="question">ש: מה זה Thread ולמה השתמשת בו?</div>
+  <div class="answer">Thread הוא "חוט ריצה" שמאפשר לבצע כמה דברים במקביל בתוך אותה תוכנית. השתמשתי בשני מקומות: (1) <b>בשרת</b> — Thread לכל לקוח, לתמיכה במרובה לקוחות. (2) <b>בלקוח</b> — כל פעולת רשת (התחברות, שליחת קובץ, רענון) רצה ב‑<code>QThread</code> נפרד, כדי <b>שהממשק הגרפי לא ייתקע</b> בזמן ההמתנה לשרת.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה ההבדל בין Thread ל‑Process?</div>
+  <div class="answer"><b>Process</b> = תוכנית עם זיכרון נפרד משלה. <b>Thread</b> = חוט ריצה בתוך תהליך, ש<b>חולק את אותו זיכרון</b> עם שאר ה‑Threads. Threads קלים יותר ומהירים לתקשורת ביניהם, אבל צריך להיזהר מגישה מקבילה לאותו מידע.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: למה QThread ולא Thread רגיל בצד הלקוח?</div>
+  <div class="answer">ב‑PyQt אסור לעדכן את הממשק מ‑Thread שאינו הראשי. <code>QThread</code> + <b>סיגנלים</b> (<code>pyqtSignal</code>) מאפשרים לתהליך הרקע לסיים את העבודה ואז "להודיע" לממשק בבטחה לעדכן את עצמו. למשל <code>self.done.emit(files)</code> בסיום שליפת קבצים.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: איך אתה מתמודד עם גישה מקבילה (race conditions)?</div>
+  <div class="answer">כל Thread בשרת מטפל בלקוח שלו ומחזיק חיבור DB משלו. מילון ה‑sessions ב‑RAM מוגן בזכות ה‑GIL של פייתון (רק Thread אחד מריץ בייטקוד בכל רגע). בנוסף, כל בקשה היא קצרה ועצמאית.</div>
+</div>
+
+<!-- ============ OOP ============ -->
+<h2 id="oop">4. תכנות מונחה עצמים 🧱</h2>
+
+<div class="q">
+  <div class="question">ש: כמה מחלקות יש לך? תן דוגמאות.</div>
+  <div class="answer">מעל 18 מחלקות. לדוגמה: <code>Login</code>, <code>Home</code>, <code>SendFileWindow</code>, <code>PrintWindow</code>, <code>AdminWindow</code> (חלונות), ומחלקות תהליכי רקע כמו <code>HeartbeatThread</code>, <code>SendFileThread</code>, <code>DownloadFileThread</code>, <code>FetchFilesThread</code>. (הדרישה: לפחות 4.)</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה ירושה (Inheritance)? איפה השתמשת?</div>
+  <div class="answer">ירושה = מחלקה "יורשת" תכונות ממחלקה אחרת. כל החלונות שלי <b>יורשים מ‑<code>QMainWindow</code></b>, וכל תהליכי הרקע <b>יורשים מ‑<code>QThread</code></b>:
+  <pre>class SendFileWindow(QMainWindow): ...
+class HeartbeatThread(QThread): ...</pre>
+  כך אני מקבל "בחינם" את כל היכולות של חלון/תהליך, ומוסיף מעליהן את ההתנהגות שלי.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה <code>__init__</code> ו‑<code>self</code>?</div>
+  <div class="answer"><code>__init__</code> היא ה<b>בנאי</b> (constructor) — רצה כשיוצרים אובייקט חדש מהמחלקה, ומאתחלת את המשתנים שלו. <code>self</code> הוא <b>האובייקט עצמו</b> — דרכו ניגשים לתכונות ולמתודות של אותו מופע ספציפי.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה pyqtSignal?</div>
+  <div class="answer">מנגנון "אות" של Qt לתקשורת בטוחה בין אובייקטים/תהליכים. למשל הגדרתי <code>closed = pyqtSignal()</code> בחלון השליחה, וכשהחלון נסגר הוא "פולט" את האות, וחלון הבית מקשיב לו וחוזר להופיע.</div>
+</div>
+
+<!-- ============ DB ============ -->
+<h2 id="db">5. בסיס נתונים 🗄️</h2>
+
+<div class="q">
+  <div class="question">ש: באיזה בסיס נתונים השתמשת ומה הטבלאות?</div>
+  <div class="answer"><b>MySQL</b>. הטבלאות העיקריות: <code>data</code> (משתמשים, סיסמאות, is_admin, is_blocked), <code>shared_files</code> (קבצים משותפים, תפוגה, מונה הורדות), <code>history</code> (לוג פעולות), <code>print_jobs</code> (עבודות הדפסה), <code>system_settings</code> (הגדרות).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה PRIMARY KEY ו‑AUTO_INCREMENT?</div>
+  <div class="answer"><b>PRIMARY KEY</b> = מזהה ייחודי לכל שורה בטבלה (אין שניים זהים). <b>AUTO_INCREMENT</b> = הערך עולה אוטומטית ב‑1 לכל שורה חדשה, כך שלא צריך לנהל ידנית מזהים.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: למה הפרדת את ה‑DB לשרת ולא חיברת את הלקוח ישירות?</div>
+  <div class="answer">אם הלקוח היה מתחבר ישירות ל‑MySQL, סיסמת ה‑DB הייתה חייבת להיות בתוך אפליקציית הלקוח — פרצת אבטחה ענקית. השרת הוא "מתווך" בטוח: רק הוא מכיר את ה‑DB, והלקוח מדבר רק איתו, דרך פרוטוקול מוגדר ומוצפן.</div>
+</div>
+
+<!-- ============ ARCHITECTURE ============ -->
+<h2 id="arch">6. ארכיטקטורה וזרימה 🏗️</h2>
+
+<div class="q">
+  <div class="question">ש: תאר מה קורה מרגע שמשתמש שולח קובץ ועד שהנמען מוריד אותו.</div>
+  <div class="answer">
+  1. הלקוח מצפין את הקובץ עם <b>מפתח AES חדש</b> שנוצר לקובץ.<br>
+  2. את מפתח ה‑AES הזה הוא מצפין עם <b>המפתח הציבורי RSA של השרת</b>.<br>
+  3. שולח לשרת (פקודה <code>upload_file</code>): הקובץ המוצפן + המפתח המוצפן + נמענים + תפוגה.<br>
+  4. השרת מעלה את הקובץ ל‑<b>Supabase Storage</b> ושומר רשומה ב‑MySQL לכל נמען.<br>
+  5. הנמען מבקש את הקובץ (<code>get_file</code>); השרת מפענח את מפתח ה‑AES עם המפתח הפרטי שלו ומחזיר אותו יחד עם הקובץ.<br>
+  6. הלקוח של הנמען מפענח את הקובץ עם ה‑AES ושומר אותו.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה זה Supabase ולמה השתמשת בו?</div>
+  <div class="answer">שירות אחסון בענן (Storage). הקבצים עצמם נשמרים שם ולא בתוך בסיס הנתונים — כך ה‑DB נשאר קל ומהיר ומחזיק רק מטא‑דאטה (מי שלח, למי, מתי פג).</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: למה ארכיטקטורת לקוח‑שרת ולא הכל במחשב אחד?</div>
+  <div class="answer">כדי שכמה משתמשים על מחשבים שונים יוכלו לשתף קבצים ביניהם דרך נקודה מרכזית אחת (השרת), שמנהלת את המשתמשים, ההרשאות והקבצים בצורה מאובטחת ומרוכזת.</div>
+</div>
+
+<!-- ============ TRAPS ============ -->
+<h2 id="traps">7. שאלות "מלכודת" נפוצות ⚠️</h2>
+
+<div class="q">
+  <div class="question">ש: למה יש בפרויקט גם <code>Werkzeug</code> אם אתה לא משתמש ב‑Flask?</div>
+  <div class="answer">משתמש בו <b>רק</b> בפונקציה אחת — <code>secure_filename</code> — שמנקה שמות קבצים מסוכנים בהעלאה (מונעת מתקפות path traversal כמו <code>../../</code>). זו ספריית עזר, לא שרת אינטרנט.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: יש לך גם socket למדפסת — איך זה קשור?</div>
+  <div class="answer">זו דוגמה נוספת לשליטה בסוקטים: הדפסה ברשת דרך <b>TCP socket לפורט 9100</b> (פרוטוקול JetDirect). זה <b>בנוסף</b> לתקשורת לקוח‑שרת הראשית שגם היא מבוססת סוקטים.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: מה קורה אם השרת קורס באמצע העברת קובץ?</div>
+  <div class="answer">TCP יזהה שהחיבור נקטע, והלקוח יקבל שגיאת חיבור (תפסתי אותה ב‑<code>try/except</code> והצגתי הודעה למשתמש). הקובץ לא "נתקע למחצה" ב‑DB כי הרשומה נכתבת רק אחרי העלאה מוצלחת.</div>
+</div>
+
+<div class="q">
+  <div class="question">ש: איך הוכחת שזה באמת מרובה לקוחות?</div>
+  <div class="answer">אפשר להריץ שני לקוחות בו זמנית (משני מחשבים או שתי הרצות) — שניהם מתחברים, נכנסים ושולחים קבצים במקביל, כי השרת פותח Thread לכל אחד.</div>
+</div>
+
+<div class="tip">
+  <b>💡 טיפ להגנה:</b> אם שואלים שאלה שאתה לא בטוח בה — אל תמציא. תגיד "אני אראה לך בקוד" ותפתח את הקובץ הרלוונטי. השליטה בקוד שלך שווה יותר משינון.
+</div>
+
+<p style="text-align:center; color:#888; margin-top:40px;">בהצלחה! 🚀 — CloudDrop</p>
+
+</body>
+</html>

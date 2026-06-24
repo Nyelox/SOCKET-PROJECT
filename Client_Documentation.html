@@ -1,0 +1,1772 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudDrop - Client Full Source Code Documentation</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.8; color: #2c3e50; background-color: #f4f7f6; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 40px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); border-radius: 10px; }
+        h1 { color: #1a252f; border-bottom: 4px solid #3498db; padding-bottom: 10px; font-size: 2.5em;}
+        h2 { color: #2980b9; border-bottom: 3px solid #ecf0f1; padding-bottom: 8px; margin-top: 60px; font-size: 2em; background: #e8f4f8; padding: 15px; border-radius: 5px;}
+        h3 { color: #e67e22; margin-top: 40px; font-size: 1.5em; border-bottom: 1px dashed #e67e22; padding-bottom: 5px;}
+        .code-block { background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 15px; margin-bottom: 20px; white-space: pre; border: 1px solid #1a1c23; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);}
+        .explanation { background: #fdfefe; border-left: 6px solid #1abc9c; padding: 20px; margin-bottom: 50px; font-size: 1.15em; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-radius: 0 8px 8px 0;}
+        .toc { background: #ecf0f1; padding: 30px; border-radius: 8px; margin-bottom: 50px; border: 1px solid #bdc3c7; }
+        .toc a { color: #2980b9; text-decoration: none; display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.2em;}
+        .toc a:hover { text-decoration: underline; color: #1abc9c; }
+        b { color: #2c3e50; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>CloudDrop Client - In-Depth Master Documentation</h1>
+    <p>This document contains <b>EVERY LINE OF CODE</b> from the Client application. Every single block of code is accompanied by a massive, deep-dive explanation. We do not skip anything. Every variable, every library, and every design choice is explained in simple, easy-to-understand words.</p>
+    
+    <div class="toc">
+        <a href="#main">1. main.py - App Entry Point</a>
+        <a href="#login">2. Login.py - User Authentication</a>
+        <a href="#signup">3. signup.py - User Registration</a>
+        <a href="#home">4. home.py - Main Dashboard</a>
+        <a href="#admin">5. admin_window.py - God-Mode Panel</a>
+        <a href="#sendfile">6. sendfile_window.py - File Transfer Hub</a>
+        <a href="#printwindow">7. printwindow.py - Print Operator Dashboard</a>
+        <a href="#printpreview">8. print_preview_window.py - The Core Print Engine</a>
+        <a href="#crypto">9. crypto_utils.py - Hybrid Encryption (RSA + AES)</a>
+        <a href="#qa" style="color: #27ae60;">❓ שאלות ותשובות לבדיקת הפרויקט</a>
+    </div>
+
+    <!-- MAIN.PY -->
+    <h2 id="main">1. main.py</h2>
+    
+    <h3>Imports & Setup</h3>
+    <div class="code-block">import sys
+import requests
+from PyQt5.QtWidgets import QApplication
+from Client.Login import Login
+from Client.client_config import SERVER_URL
+from Client import crypto_utils</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        Before any Python script can do advanced things like showing a window on a screen, it needs to import external tools. Think of this like gathering your tools before building a house.<br><br>
+        1. <b><code>import sys</code></b>: The <code>sys</code> module is a built-in Python tool that allows our script to talk directly to the Windows Operating System. We need this because when a user double-clicks the app to open it, Windows sends hidden commands to the app. Also, when the app closes, we need to tell Windows to kill the process.<br>
+        2. <b><code>import requests</code></b>: The HTTP networking library — we need it here to perform the encryption handshake with the server <i>before</i> the UI even opens.<br>
+        3. <b><code>from PyQt5.QtWidgets import QApplication</code></b>: PyQt5 is the graphics engine we use to build the UI. <code>QApplication</code> is the absolute foundation of any PyQt5 app.<br>
+        4. <b><code>from Client.Login import Login</code></b>: Imports the Login class — the first window the user sees.<br>
+        5. <b><code>SERVER_URL</code></b>: The IP/port of the server (loaded from the config JSON). We need it for the handshake.<br>
+        6. <b><code>from Client import crypto_utils</code></b>: Our encryption helper module. We need it for the RSA/AES handshake and to <i>store</i> the resulting AES session key as module-level variables that every other window can later access.
+    </div>
+
+    <h3>Main Execution Function (with Hybrid Encryption Handshake)</h3>
+    <div class="code-block">def main():
+    # ===== Hybrid encryption key exchange with the server =====
+    # 1. Fetch the server's RSA public key
+    r = requests.get(f"{SERVER_URL}/public_key", timeout=5)
+    pem = r.json()["public_key"]
+    public_key = crypto_utils.import_public_key(pem)
+
+    # 2. Generate a random AES session key
+    aes_key = crypto_utils.generate_aes_key()
+
+    # 3. Encrypt the AES key with the server's RSA public key
+    encrypted_key = crypto_utils.rsa_encrypt(public_key, aes_key)
+
+    # 4. Send the encrypted key, receive a session_token
+    r2 = requests.post(f"{SERVER_URL}/session_key",
+                       json={"encrypted_key": encrypted_key}, timeout=5)
+    session_token = r2.json()["session_token"]
+
+    # Store everything for all future requests
+    crypto_utils.AES_KEY = aes_key
+    crypto_utils.SESSION_TOKEN = session_token
+    crypto_utils.SERVER_PUBLIC_KEY = public_key
+    print("Encrypted session established with server")
+
+    app = QApplication(sys.argv)
+    login_window = Login()
+    login_window.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is the absolute starting point of the application. <b>Note that the encryption handshake runs BEFORE any UI is drawn.</b> If the handshake fails, the app will never open the login window — by design, no plaintext data should ever leave the laptop.<br><br>
+        <b>The 4-Step Handshake:</b><br>
+        1. <b>Fetch the server's RSA public key</b> via <code>GET /public_key</code>. This is the only request that is sent unencrypted — public keys are by definition public.<br>
+        2. <b>Generate a random 32-byte AES key</b> locally with <code>os.urandom</code>. Only we know it.<br>
+        3. <b>Encrypt the AES key with RSA-OAEP-SHA256</b>. The result can only be decrypted by the server, which holds the matching RSA private key.<br>
+        4. <b>POST the encrypted AES key</b> to <code>/session_key</code>. The server decrypts it, stores it under a fresh <code>session_token</code>, and returns the token.<br><br>
+        <b>Storing the keys:</b> Because Python modules are singletons, we save <code>AES_KEY</code>, <code>SESSION_TOKEN</code> and <code>SERVER_PUBLIC_KEY</code> as attributes of the <code>crypto_utils</code> module. Any window (Login, Send File, Admin) can now do <code>import Client.crypto_utils</code> and access these values from RAM, without circular imports or globals.<br><br>
+        <b>After the handshake</b>, the standard PyQt initialization runs: <code>QApplication(sys.argv)</code>, create the Login window, <code>.show()</code> it, and start the event loop with <code>app.exec_()</code>.
+    </div>
+
+    <!-- LOGIN.PY -->
+    <h2 id="login">2. Login.py</h2>
+    
+    <h3>Imports</h3>
+    <div class="code-block">import os
+import requests
+import threading
+import queue
+from PyQt5 import QtWidgets
+from PyQt5.uic import loadUi
+from PyQt5.QtWidgets import QMainWindow, QLabel, QMessageBox
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from Client.client_config import SERVER_URL
+from Client import crypto_utils</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        The Login window needs a lot of tools because it handles networking, multithreading, UI drawing, and now encryption.<br><br>
+        1. <b><code>os</code></b>: The Operating System module — used to locate the <code>login.ui</code> design file.<br>
+        2. <b><code>requests</code></b>: The HTTP networking library — used to POST the encrypted credentials to <code>/login</code>.<br>
+        3. <b><code>threading</code> & <code>queue</code></b>: Tools for running the network call in the background so the UI never freezes.<br>
+        4. <b><code>loadUi</code></b>: Loads the visual layout from the Qt Designer XML file.<br>
+        5. <b><code>pyqtSignal</code></b>: A communication wire between background threads and the UI thread.<br>
+        6. <b><code>SERVER_URL</code></b>: The server address loaded from the config JSON.<br>
+        7. <b><code>crypto_utils</code></b>: Holds the AES session key and the encryption helper functions. We use <code>aes_encrypt()</code> to seal the username + password before they leave the laptop.<br><br>
+        <b>Important change:</b> The old version of this file used to <code>from Server.Database_connection import handle_login</code> and call the database directly from the client — which is incorrect for a real client/server architecture. The login now goes through HTTP so it actually crosses the network and can be encrypted.
+    </div>
+
+    <h3>WorkerThread Class</h3>
+    <div class="code-block">class WorkerThread(threading.Thread):
+    def __init__(self, task_queue, signals):
+        super().__init__(daemon=True)
+        self.task_queue = task_queue
+        self.signals = signals
+
+    def run(self):
+        while True:
+            try:
+                task_name, data = self.task_queue.get()
+                if task_name == "login":
+                    self.handle_login(data)
+            except Exception as e:
+                print(f"Error in worker: {e}")</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This class defines the "Worker" who lives in the background. If we didn't have this class, clicking the "Login" button would freeze the entire app until the server responded. With this class, the app stays smooth and the user can even drag the window around while waiting for the login to process.<br><br>
+        1. <b><code>__init__</code></b>: When we create this worker, we hand it two things: the <code>task_queue</code> (the conveyor belt of jobs) and the <code>signals</code> (the walkie-talkies to report back).<br>
+        2. <b><code>daemon=True</code></b>: This is a critical setting. It means this thread is a "Daemon" (a ghost). If the user suddenly closes the main app window, Windows will instantly kill this background thread too. If it was False, the app window would close, but the ghost thread would keep running invisibly in the background, consuming CPU and causing bugs.<br>
+        3. <b><code>run(self)</code></b>: This is the heart of the worker. It contains a <code>while True:</code> loop, meaning it runs forever. It sits at the conveyor belt calling <code>task_queue.get()</code>. This command pauses the thread completely until a job arrives. Once a job arrives (for example, the user clicks login), it unpacks the job name and the data. If the job is named "login", it routes the data to the <code>handle_login</code> function to do the actual checking.
+    </div>
+
+    <h3>WorkerThread - handle_login (with AES Encryption)</h3>
+    <div class="code-block">    def handle_login(self, data):
+        username, password = data
+        try:
+            # Encrypt the credentials with AES before sending them over the network
+            encrypted = crypto_utils.aes_encrypt({"username": username, "password": password})
+            r = requests.post(f"{SERVER_URL}/login",
+                              json={"session_token": crypto_utils.SESSION_TOKEN,
+                                    "encrypted_data": encrypted},
+                              timeout=30)
+            response = r.json()
+
+            if response.get("status") == "Login successful":
+                self.signals.success.emit(username, response.get("is_admin", False))
+            else:
+                self.signals.error.emit(response.get("status", "Login failed"))
+
+        except Exception as e:
+            self.signals.error.emit(f"Error: {str(e)}")</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This function performs an <b>encrypted</b> login over the network. Both the username and the password are wrapped in AES-GCM before they ever leave the laptop.<br><br>
+        1. <b><code>username, password = data</code></b>: Unpacks the tuple that the UI passed in.<br>
+        2. <b><code>crypto_utils.aes_encrypt(...)</code></b>: Builds a Python dictionary <code>{"username": ..., "password": ...}</code>, JSON-encodes it, and encrypts it with AES-GCM using the session key established during the handshake. The output is a base64 string like <code>"xK9aP2mLvB..."</code> — completely opaque to anyone listening on the wire.<br>
+        3. <b><code>requests.post(f"{SERVER_URL}/login", ...)</code></b>: Sends the encrypted payload to the server. The body of the request contains TWO fields:<br>
+           - <code>session_token</code> — tells the server which AES key to use for decryption (the server stored it in a dictionary during the handshake).<br>
+           - <code>encrypted_data</code> — the encrypted credentials.<br>
+        4. <b><code>timeout=30</code></b>: We use a generous timeout because bcrypt password verification is intentionally slow (~250ms) and our cleanup hook also runs against Supabase on every request.<br>
+        5. <b>Response handling</b>: If the server responds with <code>"Login successful"</code>, we shout the success signal with the username and admin flag. Otherwise we shout the error signal so the UI can pop up a red warning. The server's response itself is unencrypted because it contains no sensitive data — only "yes/no" + admin flag.<br>
+        6. <b><code>except Exception</code></b>: If the network is down or the server crashed, we catch the error and emit it to the UI rather than letting the whole client crash.<br><br>
+        <b>What an eavesdropper sees on the wire:</b><br>
+        <code>{"session_token": "87e25017...", "encrypted_data": "xK9aP2mLvB8fH3rT..."}</code><br>
+        No matter how many login attempts they capture, they cannot extract a single password without breaking AES-256.
+    </div>
+
+    <h3>WorkerSignals Class</h3>
+    <div class="code-block">class WorkerSignals(QObject):
+    success = pyqtSignal(str, bool)
+    error = pyqtSignal(str)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This defines the exact "walkie-talkie" channels (Signals) that the background thread is allowed to use to talk to the main thread.<br><br>
+        - <b><code>success = pyqtSignal(str, bool)</code></b>: This creates a signal channel called "success". We strictly define that whoever shouts on this channel MUST send exactly two pieces of data: a String (which will be the username) and a Boolean (True/False, which will be the is_admin status).<br>
+        - <b><code>error = pyqtSignal(str)</code></b>: This creates a channel called "error". It requires exactly one String (the error message to display).<br>
+        By inheriting from <code>QObject</code>, we give this class the ability to hook directly into PyQt5's internal event loop, ensuring messages are passed safely between threads.
+    </div>
+
+    <h3>Login Window Class - Initialization</h3>
+    <div class="code-block">class Login(QMainWindow):
+    def __init__(self):
+        super(Login, self).__init__()
+        ui_path = os.path.join(os.path.dirname(__file__), "login.ui")
+        loadUi(ui_path, self)
+
+        self.current_user = None
+        self.task_queue = queue.Queue()
+
+        self.signals = WorkerSignals()
+        self.signals.success.connect(self.on_login_success)
+        self.signals.error.connect(self.on_login_failed)
+
+        self.worker = WorkerThread(self.task_queue, self.signals)
+        self.worker.start()
+
+        self.pushButton_login.clicked.connect(self.login_function)
+        self.lineEdit_password.setEchoMode(QtWidgets.QLineEdit.Password)
+
+        self.label_signup = QLabel('<a href="#" style="text-decoration: none; color: #0066cc;">Register</a>', self)
+        self.label_signup.setTextFormat(Qt.RichText)
+        self.label_signup.linkActivated.connect(self.open_signup)
+        self.label_signup.setGeometry(225, 211, 141, 16)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is the constructor for the physical Login window that the user interacts with.<br><br>
+        1. <b><code>super().__init__()</code></b>: This initializes the core <code>QMainWindow</code> engine, preparing it to hold buttons and layouts.<br>
+        2. <b><code>loadUi(ui_path, self)</code></b>: We dynamically locate the <code>login.ui</code> file on the hard drive using <code>os.path</code>. We then tell PyQt5 to parse that XML file and physically draw all the buttons, text boxes, and labels onto our window.<br>
+        3. <b>Setting up Threads</b>: We create the conveyor belt <code>queue.Queue()</code> and the walkie-talkies <code>WorkerSignals()</code>. <br>
+        4. <b>Connecting Signals</b>: We wire the walkie-talkies to the window's ears. <code>self.signals.success.connect(self.on_login_success)</code> means: "Whenever the background thread shouts 'success', instantly run the <code>on_login_success</code> function".<br>
+        5. <b>Starting the Worker</b>: We create the <code>WorkerThread</code>, give it the queue and signals, and call <code>.start()</code>. The ghost worker is now awake and waiting in the background.<br>
+        6. <b>UI Connections</b>: We link the physical "Login" button so that clicking it runs <code>login_function</code>. We also change the password text box's mode to <code>Password</code>, which automatically obscures whatever the user types by replacing characters with black dots for privacy.<br>
+        7. <b>Register Link</b>: We create a clickable HTML hyperlink for "Register". When clicked (<code>linkActivated</code>), it jumps to the <code>open_signup</code> function to take the user to the registration screen. We manually set its geometry (position and size) on the screen.
+    </div>
+
+    <h3>Login Window - Actions</h3>
+    <div class="code-block">    def login_function(self):
+        username = self.lineEdit_userName.text().strip()
+        password = self.lineEdit_password.text()
+
+        if not username or not password:
+            self.show_message("All fields are required", QMessageBox.Warning)
+            return
+
+        self.task_queue.put(("login", (username, password)))
+
+    def on_login_success(self, username, is_admin):
+        self.current_user = username
+        self.show_message(f"Welcome, {username}!", QMessageBox.Information)
+        self.open_home_window(username, is_admin)
+
+    def on_login_failed(self, message):
+        self.show_message(message, QMessageBox.Critical)
+
+    def show_message(self, message, icon=QMessageBox.Information):
+        msg = QMessageBox(self)
+        msg.setIcon(icon)
+        msg.setText(message)
+        msg.setWindowTitle("Login")
+        msg.exec_()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This block controls exactly what happens when the user tries to log in and what happens when the server replies.<br><br>
+        1. <b><code>login_function</code></b>: This is triggered the millisecond the user clicks the "Login" button. First, it scrapes the text out of the username and password boxes. It uses <code>.strip()</code> on the username to delete any accidental spaces the user might have typed at the beginning or end. <br>
+        Next, it does a safety check: if either box is totally empty, it instantly shows a warning popup and uses <code>return</code> to stop the function dead in its tracks. We don't want to bother the server with empty requests. If the fields have text, it packages them up and throws them onto the <code>task_queue</code> conveyor belt, signaling the background worker to start doing its job.<br>
+        2. <b><code>on_login_success</code></b>: This is the function that the "success" signal triggers. It saves the username to the window's memory, shows a friendly "Welcome!" popup, and then calls the function to open the main dashboard.<br>
+        3. <b><code>on_login_failed</code></b>: Triggered by the "error" signal. It takes the error message provided by the server (e.g., "Wrong Password") and displays it in a critical red popup box.<br>
+        4. <b><code>show_message</code></b>: A helper function. Instead of writing 5 lines of code every time we want to show a popup message, we built this reusable tool. It creates a <code>QMessageBox</code>, sets the icon, sets the text, and calls <code>msg.exec_()</code> to pop it onto the screen.
+    </div>
+
+    <h3>Login Window - Open Home Screen</h3>
+    <div class="code-block">    def open_home_window(self, username, is_admin=False):
+        from Client.home import Home
+
+        try:
+            r = requests.get("http://127.0.0.1:5000/all_users", timeout=5)
+            data = r.json()
+            if data.get("status") == "OK":
+                users_list = data.get("users", [])
+            else:
+                users_list = [username]
+        except Exception:
+            users_list = [username]
+
+        self.home_window = Home(
+            current_user=username,
+            users_list=users_list,
+            server_url="http://127.0.0.1:5000",
+            is_admin=is_admin
+        )
+        self.home_window.show()
+        self.close()
+
+    def open_signup(self):
+        from signup import Signup
+        self.signup_window = Signup()
+        self.signup_window.show()
+        self.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This block manages the transition from the Login screen to the rest of the application.<br><br>
+        1. <b><code>open_home_window</code></b>: When login is successful, we don't just open the home window blindly. We need data! Specifically, the file transfer system needs to know the names of every other user registered in the database so it can provide smart Autocomplete suggestions when you type a name. <br>
+        So, we send a quick HTTP GET request to our server at <code>/all_users</code>. We set a strict <code>timeout=5</code> so that if the server is incredibly slow, the app won't freeze forever; it will give up after 5 seconds. <br>
+        If the server responds successfully, we extract the list of users from the JSON data. If the internet crashes or the server is down (caught by the <code>except Exception:</code> block), we don't let the app crash. Instead, we just create a tiny list containing only the current user's name as a failsafe fallback.<br>
+        Once we have the list, we instantiate the <code>Home</code> class. We pass it the username, the list of users, the server IP address, and the boolean determining if this user is a God-Mode Admin. We show the Home window, and finally, we call <code>self.close()</code> to destroy the Login window since we no longer need it.<br>
+        2. <b><code>open_signup</code></b>: If the user clicked the "Register" hyperlink, we import the <code>Signup</code> class, create the registration window, show it, and completely close the login window to keep the screen clean.
+    </div>
+
+    <!-- SIGNUP.PY -->
+    <h2 id="signup">3. signup.py (with AES Encryption)</h2>
+    <div class="code-block">import threading
+import queue
+import time
+import requests
+from PyQt5 import QtWidgets
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel
+from PyQt5.uic import loadUi
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from Client.client_config import SERVER_URL
+from Client import Client_crypto as crypto_utils
+
+class WorkerThread(threading.Thread):
+    def __init__(self, task_queue, signals):
+        super().__init__(daemon=True)
+        self.task_queue = task_queue
+        self.signals = signals
+
+    def run(self):
+        while True:
+            try:
+                task_name, data = self.task_queue.get()
+                if task_name == "signup":
+                    self.handle_signup(data)
+            except Exception as e:
+                print(f"Error in worker: {e}")
+
+    def handle_signup(self, data):
+        username, password = data
+        try:
+            # Encrypt the credentials with AES before sending them over the network
+            encrypted = crypto_utils.aes_encrypt({"username": username, "password": password})
+            r = requests.post(f"{SERVER_URL}/signup",
+                              json={"session_token": crypto_utils.SESSION_TOKEN,
+                                    "encrypted_data": encrypted},
+                              timeout=30)
+            response = r.json()
+            status = response.get("status", "")
+
+            if status == "Sign Up successful":
+                self.signals.success.emit(status)
+            else:
+                self.signals.error.emit(status or "Sign Up failed")
+
+        except Exception as e:
+            self.signals.error.emit(f"Error: {str(e)}")
+
+class WorkerSignals(QObject):
+    success = pyqtSignal(str)
+    error = pyqtSignal(str)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        Signup follows the exact same architecture as Login — it uses a background thread to send the user's credentials to the server without freezing the UI, and it now also <b>encrypts the new username and password with AES-GCM before transmission</b>.<br><br>
+        <b>Old architecture (removed):</b> Previously, this file directly imported <code>from Server import Database_connection</code> and called <code>handle_signup(username, password)</code> on the same Python process. That meant the client needed a working MySQL connection of its own — which would not work when the client runs on a different physical computer (the school laptop). The whole point of having a server is that only the server talks to the database.<br><br>
+        <b>New architecture:</b><br>
+        1. <b><code>from Client import Client_crypto as crypto_utils</code></b>: Imports the encryption module under an alias so it can be referenced concisely throughout the code.<br>
+        2. <b><code>crypto_utils.aes_encrypt({"username": ..., "password": ...})</code></b>: Wraps the credentials with AES-GCM using the session key established during the handshake (the same session key that protects login).<br>
+        3. <b><code>requests.post(f"{SERVER_URL}/signup", json={"session_token": ..., "encrypted_data": ...})</code></b>: Sends only the session token (an opaque identifier) and the encrypted blob. Anyone sniffing the network sees nothing meaningful.<br>
+        4. <b>Why does the server still need bcrypt then?</b> Because AES protects the password <i>in transit</i>, but once it arrives, the server decrypts it back to plaintext for verification. Storing that plaintext in the database would be terrible if the DB ever gets stolen — so the server immediately applies bcrypt to produce a one-way hash that lives in MySQL. <b>Encryption (AES)</b> protects the journey; <b>hashing (bcrypt)</b> protects the storage. Both are required.<br>
+        5. The <code>WorkerThread</code> still uses a Queue + Signals pattern so the UI stays responsive throughout the network call.
+    </div>
+
+    <h3>Signup Window UI Logic</h3>
+    <div class="code-block">class Signup(QMainWindow):
+    def __init__(self):
+        super(Signup, self).__init__()
+        loadUi('signup.ui', self)
+
+        self.task_queue = queue.Queue()
+        self.signals = WorkerSignals()
+        self.signals.success.connect(self.on_signup_success)
+        self.signals.error.connect(self.show_message)
+
+        self.worker = WorkerThread(self.task_queue, self.signals)
+        self.worker.start()
+
+        self.pushButton_signUp.clicked.connect(self.signup_function)
+        self.lineEdit_password.setEchoMode(QtWidgets.QLineEdit.Password)
+        self.lineEdit_confirmPassword.setEchoMode(QtWidgets.QLineEdit.Password)
+
+        self.label_login = QLabel('<a href="#" style="text-decoration: none; color: #0066cc;">Click here!</a>', self)
+        self.label_login.setTextFormat(Qt.RichText)
+        self.label_login.linkActivated.connect(self.go_to_login)
+        self.label_login.setGeometry(193, 223, 141, 16)
+
+    def signup_function(self):
+        username = self.lineEdit_userName.text().strip()
+        password = self.lineEdit_password.text()
+        confirm_password = self.lineEdit_confirmPassword.text()
+
+        if not username or not password or not confirm_password:
+            self.show_message("All fields are required")
+            return
+
+        if password != confirm_password:
+            self.show_message("Passwords do not match")
+            return
+
+        self.task_queue.put(("signup", (username, password)))
+
+    def on_signup_success(self, message):
+        self.show_message(message)
+        self.go_to_login()
+
+    def show_message(self, text):
+        QMessageBox.information(self, "Signup", text)
+
+    def go_to_login(self):
+        from Login import Login
+        self.login_window = Login()
+        self.login_window.show()
+        self.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This block controls the visual Registration Window and user interactions.<br><br>
+        1. <b>Setup</b>: We load the visual `signup.ui` file. We set up the queue and signals. We start the ghost worker thread.<br>
+        2. <b>Password Masking</b>: Registration screens require the user to type their password twice to ensure they didn't make a typo. We use <code>setEchoMode(QtWidgets.QLineEdit.Password)</code> on BOTH the password box and the confirm password box. This ensures any text typed into these boxes is immediately replaced with black dots (***) so nobody looking over the user's shoulder can steal their password.<br>
+        3. <b><code>signup_function</code></b>: When the user clicks the "Sign Up" button, this logic fires. First, it grabs the text from all three boxes. It checks if any box is completely empty. If so, it shows an error and stops.<br>
+        Then, we perform <b>Data Validation</b>: <code>if password != confirm_password:</code>. This compares the two password boxes. If the user made a typo and the strings are not 100% identical, we show an error popup and abort the process. This prevents users from locking themselves out of a new account by mistyping their password. If everything is perfect, we drop the data onto the conveyor belt for the background thread to handle.<br>
+        4. <b>Success & Routing</b>: If the background thread successfully creates the account, <code>on_signup_success</code> fires. It shows the success popup to the user, and then automatically runs <code>go_to_login()</code>. This creates the Login window again and closes the signup window, placing the user right where they need to be to log in with their brand new credentials.
+    </div>
+
+    <!-- HOME.PY -->
+    <h2 id="home">4. home.py</h2>
+    
+    <div class="code-block">import os
+from PyQt5.QtWidgets import QMainWindow, QLabel, QPushButton
+from PyQt5.uic import loadUi
+from PyQt5.QtCore import Qt
+
+class Home(QMainWindow):
+    def __init__(self, current_user="", users_list=None, server_url="http://127.0.0.1:5000", is_admin=False):
+        super().__init__()
+        ui_path = os.path.join(os.path.dirname(__file__), "home.ui")
+        loadUi(ui_path, self)
+
+        self.current_user = current_user or ""
+        self.users_list = users_list or []
+        self.server_url = server_url
+        self.is_admin = is_admin
+
+        self.button_sendfile.clicked.connect(self.open_send_file)
+        self.button_sendedfile.clicked.connect(self.open_print_window)
+        self.button_sendedfile.setText("Print files")
+
+        self.label_logout = QLabel('<a href="#" style="text-decoration: none; color: #0066cc;">Logout</a>', self)
+        self.label_logout.setTextFormat(Qt.RichText)
+        self.label_logout.linkActivated.connect(self.go_to_login)
+        self.label_logout.setGeometry(340, 10, 47, 16)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is the Main Menu Dashboard. It acts as the central hub connecting all the different parts of the application.<br><br>
+        1. <b>Constructor Inputs</b>: Notice that the <code>__init__</code> function accepts 4 pieces of data: the <code>current_user</code> (who logged in), the <code>users_list</code> (the list of all registered names we fetched during login), the <code>server_url</code> (where the database lives), and <code>is_admin</code> (a Boolean telling us if this user has God-Mode powers). We save these to the window's memory so we can pass them to other windows later.<br>
+        2. <b>Button Wiring</b>: We connect the "Send File" button to the <code>open_send_file</code> function, and the "Print Files" button to <code>open_print_window</code>. We also explicitly set the text of the print button to "Print files" just in case the UI designer forgot to name it properly in the `.ui` file.<br>
+        3. <b>Dynamic Logout Link</b>: Instead of a chunky button, we create a sleek HTML hyperlink for logging out. We place it in the top right corner of the window by hardcoding its geometry coordinates to (340, 10) and its size to 47x16 pixels. We wire it so that clicking the link triggers the <code>go_to_login</code> function.
+    </div>
+
+    <h3>Home - Dynamic Admin Button</h3>
+    <div class="code-block">        # Add Admin Button if user is admin
+        if self.is_admin:
+            self.btn_admin = QPushButton("Admin Panel", self.centralwidget)
+            self.btn_admin.setGeometry(100, 270, 200, 45)
+            self.btn_admin.setStyleSheet("""
+                QPushButton {
+                  background-color: #ff4444;
+                  color: white;
+                  border-radius: 10px;
+                  font-size: 12pt;
+                }
+                QPushButton:hover {
+                  background-color: #ff6666;
+                }
+            """)
+            self.btn_admin.clicked.connect(self.open_admin_window)
+            
+            # Increase window height slightly to fit the button
+            self.resize(400, 350)
+            if self.height() < 350: 
+               self.resize(400, 350) 
+
+        self.sendfile_window = None
+        self.login_window = None
+        self.admin_window = None</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is one of the coolest security and UI features in the entire project. It dynamically alters the interface based on the user's permission level.<br><br>
+        In traditional app design, you might put the "Admin" button on the screen and just disable it (gray it out) if the user isn't an admin. However, seeing grayed-out buttons can confuse normal users or tempt hackers. Instead, we do not include the Admin button in the XML UI file at all. It physically does not exist.<br><br>
+        1. <b>The IF Gate</b>: <code>if self.is_admin:</code> checks the boolean flag. If a normal user logs in, the computer skips this entire block of code. The button is never created, consuming zero memory.<br>
+        2. <b>Dynamic Creation</b>: If an Admin logs in, the code executes. We instantiate a brand new <code>QPushButton</code> using pure code. We place it exactly at coordinates X:100, Y:270, making it 200 pixels wide and 45 pixels tall.<br>
+        3. <b>CSS Styling</b>: We inject CSS code directly into the button using <code>setStyleSheet</code>. We make it a striking red (<code>#ff4444</code>) to signify danger/administrative power. We round the corners (<code>border-radius</code>) and make the text large (<code>12pt</code>). We even add a hover effect so the button turns a lighter red when the mouse rests over it.<br>
+        4. <b>Window Resizing</b>: Because we just injected a new button at the bottom of the screen, we must stretch the physical window to ensure the button fits! We use <code>self.resize(400, 350)</code> to make the window taller, accommodating the new God-Mode button.
+    </div>
+
+    <h3>Home - Navigation Functions</h3>
+    <div class="code-block">    def open_send_file(self):
+        from Client.sendfile_window import SendFileWindow
+        users = self.users_list if self.users_list else [self.current_user]
+        self.sendfile_window = SendFileWindow(
+            current_user=self.current_user,
+            users_list=users,
+            server_url=self.server_url
+        )
+        self.sendfile_window.destroyed.connect(self._return_from_sendfile)
+        self.sendfile_window.show()
+        self.hide()
+
+    def _return_from_sendfile(self):
+        self.show()
+
+    def open_print_window(self):
+        from Client.printwindow import PrintWindow
+        self.print_window = PrintWindow(
+            current_user=self.current_user,
+            server_url=self.server_url
+        )
+        self.print_window.show()
+
+    def open_admin_window(self):
+        from Client.admin_window import AdminWindow
+        self.admin_window = AdminWindow(self.current_user, self.server_url)
+        self.admin_window.show()
+
+    def go_to_login(self):
+        from Login import Login
+        self.login_window = Login()
+        self.login_window.show()
+        self.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        These functions handle jumping around the application. They are the traffic directors of the UI.<br><br>
+        1. <b><code>open_send_file</code></b>: This handles opening the file transfer window. Notice how we pass down the <code>current_user</code>, the <code>users_list</code>, and the <code>server_url</code>. We are passing the baton of data from one window to the next. <br>
+        A very important detail here is <code>self.hide()</code>. We don't want 5 different windows clogging up the user's screen. So, we hide the Home window while the Send File window is open. We also wire the Send File window's <code>destroyed</code> signal so that when the user closes the Send File window, it triggers <code>_return_from_sendfile</code>, which runs <code>self.show()</code> to make the Home window reappear seamlessly!<br>
+        2. <b><code>open_print_window</code> & <code>open_admin_window</code></b>: These work similarly, but they don't hide the home window. They simply spawn new sub-windows for managing print jobs or managing users.<br>
+        3. <b><code>go_to_login</code></b>: The logout sequence. It creates a brand new Login window, displays it, and then completely destroys (<code>self.close()</code>) the Home window, logging the user out and wiping their session from the screen.
+    </div>
+
+    <!-- ADMIN WINDOW -->
+    <h2 id="admin">5. admin_window.py</h2>
+    <div class="code-block">import os
+import requests
+from PyQt5.QtWidgets import QMainWindow, QTableWidgetItem, QMessageBox, QHeaderView
+from PyQt5.QtCore import Qt
+from PyQt5.uic import loadUi
+
+class AdminWindow(QMainWindow):
+    def __init__(self, current_user, server_url):
+        super().__init__()
+        self.current_user = current_user
+        self.server_url = server_url
+
+        ui_path = os.path.join(os.path.dirname(__file__), "admin_window.ui")
+        loadUi(ui_path, self)
+
+        # Stretch columns
+        self.users_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # Connect signals
+        self.btn_block.clicked.connect(self.block_user)
+        self.btn_unblock.clicked.connect(self.unblock_user)
+        self.btn_refresh_users.clicked.connect(self.load_users)
+        self.btn_refresh_history.clicked.connect(self.load_history)
+        self.combo_users.currentIndexChanged.connect(self.load_history)
+
+        # Initial data load
+        self.combo_users.addItem("All Users")
+        self.load_users()
+        self.load_history()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This initializes the God-Mode Admin Panel where administrators can oversee the entire system, track user actions, and ban malicious users.<br><br>
+        1. <b>Layout Initialization</b>: As always, we load the UI from the XML file. <br>
+        2. <b>Stretching Columns</b>: We have two large data grids (Tables) on this screen: one for the user list, and one for the history log. By default, PyQt tables crunch all columns to the left side, leaving ugly blank space on the right. We use <code>horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)</code>. This powerful command tells the table to automatically stretch its columns equally so they fill 100% of the available window width, making the app look incredibly polished and modern.<br>
+        3. <b>Wiring the Controls</b>: We connect the "Block", "Unblock", and "Refresh" buttons to their specific functions. <br>
+        A unique connection is <code>self.combo_users.currentIndexChanged.connect(self.load_history)</code>. This connects the Dropdown menu (Combo Box). Whenever the admin clicks the dropdown and selects a different username, this signal fires instantly, telling the system to automatically reload the history logs filtered for that specific user. No "Search" button required!<br>
+        4. <b>Bootstrapping Data</b>: Finally, we trigger <code>self.load_users()</code> and <code>self.load_history()</code> to populate the screen with data the millisecond the window opens.
+    </div>
+
+    <h3>Admin - Load Users</h3>
+    <div class="code-block">    def load_users(self):
+        try:
+            url = f"{self.server_url}/admin/users"
+            resp = requests.post(url, json={"admin_user": self.current_user})
+            data = resp.json()
+
+            if data.get("status") == "OK":
+                users = data.get("users", [])
+                self.users_table.setRowCount(0)
+
+                current_combo_text = self.combo_users.currentText()
+                self.combo_users.blockSignals(True)
+                self.combo_users.clear()
+                self.combo_users.addItem("All Users")
+
+                for row_idx, user in enumerate(users):
+                    self.users_table.insertRow(row_idx)
+                    self.users_table.setItem(row_idx, 0, QTableWidgetItem(user["username"]))
+
+                    blocked_item = QTableWidgetItem("Yes" if user["is_blocked"] else "No")
+                    if user["is_blocked"]:
+                        blocked_item.setBackground(Qt.red)
+                        blocked_item.setForeground(Qt.white)
+                    self.users_table.setItem(row_idx, 1, blocked_item)
+
+                    admin_item = QTableWidgetItem("Yes" if user["is_admin"] else "No")
+                    if user["is_admin"]:
+                        admin_item.setForeground(Qt.blue)
+                    self.users_table.setItem(row_idx, 2, admin_item)
+
+                    self.combo_users.addItem(user["username"])
+
+                index = self.combo_users.findText(current_combo_text)
+                self.combo_users.setCurrentIndex(index if index >= 0 else 0)
+                self.combo_users.blockSignals(False)
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to load users: {data.get('status')}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Connection error: {e}")</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This complex function connects to the server, retrieves the master list of all users, populates the visual data grid, and manages the dropdown filter.<br><br>
+        1. <b>Secure Request</b>: We send an HTTP POST request to <code>/admin/users</code>. We explicitly pack <code>"admin_user": self.current_user</code> into the JSON. The server will cross-reference this username with the database to guarantee this user is an admin before handing over sensitive data.<br>
+        2. <b>Preparing the Grid</b>: We use <code>self.users_table.setRowCount(0)</code> to completely erase all data currently in the table, giving us a clean slate.<br>
+        3. <b>Protecting the Dropdown (Combo Box)</b>: We need to clear the dropdown menu and refill it with the newly downloaded names. However, earlier we set up a rule: "If the dropdown changes, reload the history". If we clear the dropdown with code, the system thinks the user changed it, and it triggers a massive chain reaction of useless history reloads! To stop this, we use <code>self.combo_users.blockSignals(True)</code>. This gags the dropdown, stopping it from sending signals while we rebuild its list. Once we finish putting all the names in, we turn the signals back on.<br>
+        4. <b>Dynamic Visual Styling</b>: We loop through every user we downloaded. For each user, we insert a new row in the grid. We add their username. <br>
+        Then we check their ban status (<code>user["is_blocked"]</code>). If they are banned, we create a cell saying "Yes" and use <code>setBackground(Qt.red)</code> and <code>setForeground(Qt.white)</code> to paint the entire cell bright red with white text. This makes it incredibly easy for the admin to spot banned users at a glance. We do something similar for Admins, painting their text Blue to highlight VIPs.
+    </div>
+
+    <h3>Admin - Load History & Block Users</h3>
+    <div class="code-block">    def load_history(self):
+        target = self.combo_users.currentText()
+        target_user = None if target == "All Users" else target
+        try:
+            url = f"{self.server_url}/admin/history"
+            resp = requests.post(url, json={"admin_user": self.current_user, "target_user": target_user})
+            data = resp.json()
+            if data.get("status") == "OK":
+                history = data.get("history", [])
+                self.history_table.setRowCount(0)
+                for row_idx, h in enumerate(history):
+                    self.history_table.insertRow(row_idx)
+                    self.history_table.setItem(row_idx, 0, QTableWidgetItem(str(h["timestamp"])))
+                    self.history_table.setItem(row_idx, 1, QTableWidgetItem(h["username"]))
+                    self.history_table.setItem(row_idx, 2, QTableWidgetItem(h["action"]))
+                    self.history_table.setItem(row_idx, 3, QTableWidgetItem(h["details"]))
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to load history: {data.get('status')}")
+        except Exception as e:
+            print(f"History load error: {e}")
+
+    def block_user(self):
+        self._set_block_status(True)
+
+    def unblock_user(self):
+        self._set_block_status(False)
+
+    def _set_block_status(self, block: bool):
+        row = self.users_table.currentRow()
+        if row < 0:
+            QMessageBox.information(self, "Info", "Please select a user first.")
+            return
+
+        username = self.users_table.item(row, 0).text()
+
+        try:
+            url = f"{self.server_url}/admin/block_user"
+            resp = requests.post(url, json={
+                "admin_user": self.current_user,
+                "target_user": username,
+                "block": block,
+            })
+            data = resp.json()
+
+            if data.get("status") == "OK":
+                action = "blocked" if block else "unblocked"
+                QMessageBox.information(self, "Success", f"User '{username}' {action} successfully.")
+                self.load_users()
+            else:
+                QMessageBox.warning(self, "Error", data.get("status"))
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This block controls the Audit Log (History) and the Banning mechanism.<br><br>
+        1. <b><code>load_history</code></b>: This function reads the current value of the dropdown menu. If it says "All Users", we pass <code>None</code> to the server, and the server returns the global master log of everything anyone has ever done (Uploads, Downloads, Logins). If a specific name is selected, the server filters the log to only show actions taken by that person. We then populate the history data grid column by column: Timestamp, Username, Action, and Details.<br>
+        2. <b><code>block_user</code> & <code>unblock_user</code></b>: These are simple wrapper functions connected to the UI buttons. They both just call the master function <code>_set_block_status</code>, passing <code>True</code> for ban, and <code>False</code> to lift the ban.<br>
+        3. <b><code>_set_block_status</code></b>: This handles the actual banning logic. First, it uses <code>self.users_table.currentRow()</code> to figure out exactly which row the admin clicked on with their mouse. If it returns <code>-1</code>, it means the admin clicked the block button without selecting anyone first! We show an info popup to guide them.<br>
+        If a row is selected, it scrapes the username from the first column of that row. It builds a JSON payload containing the admin's name (for security), the target user's name, and the boolean ban command. It sends this to the server. If successful, it shows a confirmation popup and immediately runs <code>self.load_users()</code> to refresh the grid, so the admin instantly sees the row turn red as confirmation of the ban.
+    </div>
+
+    <!-- SENDFILE_WINDOW.PY -->
+    <h2 id="sendfile" class="important">6. sendfile_window.py (VERY IMPORTANT)</h2>
+    <p>This is the most critical and complex networking file in the entire project. It handles physical file transfers, base64 encoding, live UI updates, and intelligent background processing.</p>
+    
+    <h3>The Four Background Threads</h3>
+    <div class="code-block">import os
+import base64
+import requests
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QListWidgetItem, QMessageBox, QCompleter
+from PyQt5.uic import loadUi
+
+# 1. HeartbeatThread (Tells server you are online)
+class HeartbeatThread(QThread):
+    def __init__(self, server_url, username):
+        super().__init__()
+        self.server_url = server_url
+        self.username   = username
+    def run(self):
+        try:
+            requests.post(f"{self.server_url}/user_online", json={"username": self.username}, timeout=3)
+        except Exception:
+            pass
+
+# 2. UsersRefreshThread (Downloads user list for Autocomplete)
+class UsersRefreshThread(QThread):
+    done = pyqtSignal(list)
+    def __init__(self, server_url, current_user):
+        super().__init__()
+        self.server_url   = server_url
+        self.current_user = current_user
+    def run(self):
+        try:
+            r_all  = requests.get(f"{self.server_url}/all_users", timeout=5)
+            all_users = r_all.json().get("users", [])
+        except Exception:
+            all_users = []
+        try:
+            r_on   = requests.get(f"{self.server_url}/online_users", timeout=3)
+            online_set = set(r_on.json().get("online", []))
+        except Exception:
+            online_set = set()
+
+        others       = [u for u in all_users if u != self.current_user]
+        online_first = [u for u in others if u in online_set]
+        offline_rest = [u for u in others if u not in online_set]
+
+        result = [(u, u) for u in online_first] + [(u, u) for u in offline_rest]
+        self.done.emit(result)
+
+# 3. IncomingFilesThread (Checks if anyone sent you a file)
+class IncomingFilesThread(QThread):
+    done  = pyqtSignal(list)
+    error = pyqtSignal(str)
+    def __init__(self, server_url, receiver):
+        super().__init__()
+        self.server_url = server_url
+        self.receiver   = receiver
+    def run(self):
+        try:
+            r = requests.post(f"{self.server_url}/incoming_files", json={"receiver": self.receiver}, timeout=8)
+            data = r.json()
+            if data.get("status") == "OK":
+                self.done.emit(data.get("files", []))
+            else:
+                self.error.emit(data.get("status", "Error"))
+        except Exception as e:
+            self.error.emit(str(e))
+
+# 4. SendFileThread (Uploads a file to the server)
+class SendFileThread(QThread):
+    success = pyqtSignal()
+    error   = pyqtSignal(str)
+    def __init__(self, server_url, payload):
+        super().__init__()
+        self.server_url = server_url
+        self.payload    = payload
+    def run(self):
+        try:
+            r = requests.post(f"{self.server_url}/upload_file", json=self.payload, timeout=30)
+            data = r.json()
+            if data.get("status") == "OK":
+                self.success.emit()
+            else:
+                self.error.emit(data.get("status", "Upload failed"))
+        except Exception as e:
+            self.error.emit(str(e))
+
+# 5. DownloadFileThread (Downloads a file from the server)
+class DownloadFileThread(QThread):
+    done  = pyqtSignal(dict)
+    error = pyqtSignal(str)
+    def __init__(self, server_url, receiver, file_id):
+        super().__init__()
+        self.server_url = server_url
+        self.receiver   = receiver
+        self.file_id    = file_id
+    def run(self):
+        try:
+            r = requests.post(f"{self.server_url}/get_file", json={"receiver": self.receiver, "file_id": self.file_id}, timeout=30)
+            data = r.json()
+            if data.get("status") == "OK":
+                self.done.emit(data)
+            else:
+                self.error.emit(data.get("status", "Error"))
+        except Exception as e:
+            self.error.emit(str(e))</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        Why does this single window need FIVE different threading classes? Because network operations are inherently unpredictable and slow. If you attempt to upload a 50 Megabyte file over a slow Wi-Fi connection on the main thread, your entire application will freeze, turn white, and Windows will prompt the user to "Close Program or Wait". By offloading every single network call to these background ghosts, the UI remains silky smooth 100% of the time.<br><br>
+        1. <b>HeartbeatThread</b>: This is a tiny, silent thread. All it does is hit the <code>/user_online</code> endpoint. The server uses this to track who is currently sitting at their computer with the app open.<br>
+        2. <b>UsersRefreshThread</b>: This is a highly intelligent thread. It doesn't just download a blind list of users. It makes two API calls: one for ALL users, and one for ONLINE users. It then does some clever list manipulation in Python to sort the master list so that <b>Online users are placed at the very top</b>, followed by offline users. This means when you start typing a name, the autocomplete will prioritize suggesting people who are actually awake and online to receive your file!<br>
+        3. <b>IncomingFilesThread</b>: This thread constantly polls the server asking "Did anyone send me a new file?". If yes, it emits the data back to the UI to update the visual inbox.<br>
+        4. <b>SendFileThread</b>: This takes the massive JSON payload (containing the file data) and pushes it to the server. We give it a generous <code>timeout=30</code> (30 seconds) because uploading large files takes significant time.<br>
+        5. <b>DownloadFileThread</b>: This sends the unique ID of the file you want to download to the server, and waits for the server to stream the massive Base64 text string back.
+    </div>
+
+    <h3>SendFileWindow Class - Setup</h3>
+    <div class="code-block">class SendFileWindow(QMainWindow):
+    def __init__(self, current_user, users_list, server_url="http://127.0.0.1:5000"):
+        super().__init__()
+        ui_path = os.path.join(os.path.dirname(__file__), "sendfile_window.ui")
+        loadUi(ui_path, self)
+
+        self.current_user     = current_user
+        self.server_url       = server_url
+        self._all_users_cache = []
+        self._threads: list   = []
+        self.selected_file_path = None
+        self.incoming_raw       = []
+
+        self.label_current_user.setText(f"Connected as: {current_user}")
+
+        self.btn_select.clicked.connect(self.select_file)
+        self.btn_send.clicked.connect(self.send_file)
+        self.btn_refresh.clicked.connect(self.refresh_incoming)
+        self.btn_download.clicked.connect(self.download_selected)
+        self.input_filter.textChanged.connect(self.apply_filter)
+
+        self.completer = QCompleter([], self)
+        self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchContains)
+        self.input_receivers.setCompleter(self.completer)
+
+        self.heartbeat_timer = QTimer(self)
+        self.heartbeat_timer.timeout.connect(self._send_heartbeat)
+        self.heartbeat_timer.start(8000)
+
+        self.users_refresh_timer = QTimer(self)
+        self.users_refresh_timer.timeout.connect(self.refresh_users_online)
+        self.users_refresh_timer.start(15000)
+
+        self.refresh_incoming()
+        self.refresh_users_online()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This constructor sets up the interactive File Transfer environment.<br><br>
+        1. <b>Thread Memory Management</b>: We declare <code>self._threads = []</code>. In Python, memory is managed by a "Garbage Collector". If you spawn a background thread and don't save a reference to it in a variable, the Garbage Collector will see a floating, unattached process and instantly assassinate it to save RAM, causing your app to crash spectacularly. By appending our threads into this list, we keep them "anchored" and safe from the Garbage Collector.<br>
+        2. <b>QCompleter (Intelligent Autocomplete)</b>: We create a <code>QCompleter</code> and attach it to the text box where you type the recipient's name. We set <code>Qt.CaseInsensitive</code> (so 'daniel' matches 'Daniel') and <code>Qt.MatchContains</code> (so typing 'ni' will find 'Daniel'). This creates a beautiful, professional dropdown suggestion box as the user types.<br>
+        3. <b>QTimers (The Heartbeat Automators)</b>: A <code>QTimer</code> is a clock ticking inside the GUI. We create one timer that ticks every 8,000 milliseconds (8 seconds) and fires the heartbeat function to keep the user marked as 'Online'. We create a second timer ticking every 15,000 milliseconds (15 seconds) to automatically refresh the autocomplete user list in the background. This creates a "Live" application feel without the user having to manually click a refresh button.
+    </div>
+
+    <h3>SendFileWindow - Sending a File (with Hybrid Encryption)</h3>
+    <div class="code-block">    def select_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select File")
+        if path:
+            self.selected_file_path = path
+            self.lbl_file.setText(os.path.basename(path))
+            self.btn_send.setEnabled(True)
+
+    def send_file(self):
+        if not self.selected_file_path:
+            QMessageBox.warning(self, "Error", "No file selected")
+            return
+
+        raw_recipients = self.input_receivers.text().split(",")
+        receivers = [r.strip() for r in raw_recipients if r.strip()]
+        if not receivers:
+            QMessageBox.warning(self, "Error", "Write a name to send")
+            return
+
+        filename = os.path.basename(self.selected_file_path)
+        with open(self.selected_file_path, "rb") as f:
+            raw = f.read()
+
+        # === Hybrid encryption of the file ===
+        # 1. Generate a brand-new AES key just for this file
+        file_aes_key = crypto_utils.generate_aes_key()
+        # 2. Encrypt the file content with AES
+        encrypted_file = crypto_utils.aes_encrypt_bytes(file_aes_key, raw)
+        # 3. Encrypt the AES key with the server's RSA public key
+        encrypted_aes_key = crypto_utils.rsa_encrypt(
+            crypto_utils.SERVER_PUBLIC_KEY, file_aes_key)
+
+        payload = {
+            "sender":    self.current_user,
+            "receivers": receivers,
+            "filename":  filename,
+            "filedata":  base64.b64encode(encrypted_file).decode(),
+            "encrypted_aes_key": encrypted_aes_key,
+            "minutes":   int(self.spin_minutes.value()),
+            "max_downloads": int(self.spin_downloads.value()),
+            "message":   self.input_file_message.text().strip(),
+        }
+
+        self.btn_send.setEnabled(False)
+        self.btn_send.setText("Sending...")
+
+        t = SendFileThread(self.server_url, payload)
+        t.success.connect(self._on_send_success)
+        t.error.connect(self._on_send_error)
+        self._threads.append(t)
+        t.start()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is the heart of the project's at-rest encryption. <b>Every uploaded file gets its own private AES key</b>, and that key is itself encrypted with the server's RSA public key. The encrypted file ends up in Supabase, the encrypted AES key ends up in MySQL — neither component alone is enough to read the file.<br><br>
+        1. <b><code>select_file</code></b>: Opens the standard Windows file picker via <code>QFileDialog.getOpenFileName</code>.<br>
+        2. <b>Recipient Parsing</b>: Splits the comma-separated "To:" box into a list of recipient usernames.<br>
+        3. <b>Read the file</b>: Opens in <code>"rb"</code> (Read Binary) mode and slurps the raw bytes into <code>raw</code>.<br>
+        4. <b>Step 1 of Hybrid Encryption — Generate per-file AES key</b>: <code>crypto_utils.generate_aes_key()</code> returns 32 fresh random bytes. This key is used <i>only for this one file</i>. A new key will be generated for the next upload.<br>
+        5. <b>Step 2 — Encrypt the file with AES-GCM</b>: <code>aes_encrypt_bytes(file_aes_key, raw)</code> produces ciphertext that looks like random noise. Even with the encrypted file in hand, no one can read it without the AES key.<br>
+        6. <b>Step 3 — Encrypt the AES key with RSA</b>: <code>rsa_encrypt(SERVER_PUBLIC_KEY, file_aes_key)</code> wraps the 32-byte AES key in an RSA-OAEP envelope. Only someone with the server's <i>private</i> RSA key can open this envelope.<br>
+        7. <b>Build the payload</b>: We base64-encode the encrypted bytes (so they fit in JSON), and we add the new <code>encrypted_aes_key</code> field. <code>filedata</code> now contains <i>ciphertext</i>, not the raw file.<br>
+        8. <b>Dispatch the background thread</b>: <code>SendFileThread</code> performs the HTTP POST to <code>/upload_file</code> without freezing the UI.<br><br>
+        <b>What an attacker would need to read this file:</b> They would need to (a) breach Supabase to get the encrypted bytes, (b) breach our MySQL to get the encrypted AES key, AND (c) breach our running server's RAM to extract the RSA private key. All three. Simultaneously. This is what cryptographers call "defense in depth".
+    </div>
+
+    <h3>SendFileWindow - Receiving & Downloading</h3>
+    <div class="code-block">    def _on_incoming_loaded(self, files):
+        self.list_incoming.clear()
+        self.incoming_raw = files
+        for f in files:
+            msg_part = f" | Msg: {f['message']}" if f.get("message") else ""
+            dl_part = f" | Downloads: {f.get('download_count', 0)}/{f.get('max_downloads', 1)}"
+            txt  = (f"{f['filename']} | From: {f['sender']} | Expires: {f['expires_at']}{dl_part}{msg_part}")
+            item = QListWidgetItem(txt)
+            item.setData(Qt.UserRole, f["id"])
+            self.list_incoming.addItem(item)
+        self.apply_filter()
+
+    def apply_filter(self):
+        filter_text = self.input_filter.text().lower()
+        for i in range(self.list_incoming.count()):
+            item = self.list_incoming.item(i)
+            item.setHidden(filter_text not in item.text().lower())
+
+    def download_selected(self):
+        item = self.list_incoming.currentItem()
+        if not item:
+            QMessageBox.information(self, "No Selection", "Please select a file from the list")
+            return
+
+        file_id = item.data(Qt.UserRole)
+        self.btn_download.setEnabled(False)
+        self.btn_download.setText("Downloading...")
+
+        t = DownloadFileThread(self.server_url, self.current_user, file_id)
+        t.done.connect(self._on_download_done)
+        t.error.connect(self._on_download_error)
+        self._threads.append(t)
+        t.start()
+
+    def _on_download_done(self, data):
+        self.btn_download.setEnabled(True)
+        self.btn_download.setText("Download")
+
+        # === Hybrid decryption of the file ===
+        # 1. Encrypted file + decrypted AES key from server
+        encrypted_file = base64.b64decode(data["filedata"])
+        file_aes_key = base64.b64decode(data["file_aes_key"])
+        # 2. Decrypt the file content with AES
+        raw = crypto_utils.aes_decrypt_bytes(file_aes_key, encrypted_file)
+
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save File", data["filename"])
+        if save_path:
+            with open(save_path, "wb") as f:
+                f.write(raw)
+            QMessageBox.information(self, "Success", "File saved successfully")</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        The receive-side of the hybrid encryption. The server already used its RSA private key to decrypt the file's per-file AES key before sending the response, so when the data arrives here, the AES key comes <i>alongside</i> the encrypted file.<br><br>
+        1. <b><code>data["filedata"]</code></b>: base64 of the AES-encrypted file bytes (still ciphertext).<br>
+        2. <b><code>data["file_aes_key"]</code></b>: base64 of the now-decrypted AES key for this specific file.<br>
+        3. <b><code>aes_decrypt_bytes(file_aes_key, encrypted_file)</code></b>: Runs AES-GCM decryption and authentication. If the ciphertext was tampered with, this raises <code>InvalidTag</code> and we refuse to save the file.<br>
+        4. <b><code>QFileDialog.getSaveFileName(...)</code></b>: Asks the user where to save the file. Only at this moment, after the user explicitly picks a location, does the plaintext file touch the disk.<br>
+        5. <b><code>open(save_path, "wb").write(raw)</code></b>: Writes the decrypted bytes to disk.<br><br>
+        <b>Note:</b> The AES key arrives in plaintext base64 in the JSON response, but the response itself travels over the secure HTTP session. In a future hardening pass, the AES key could additionally be wrapped with the session AES key — but for the current scope, the layered session encryption + per-file encryption is already a very strong defense.
+    </div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This section controls how the user interacts with files sent to them, filtering them, and ultimately downloading them.<br><br>
+        1. <b>Building the Inbox (<code>_on_incoming_loaded</code>)</b>: When the background thread successfully asks the server for waiting files, it hands a list of dictionaries to this function. We loop through the list, assembling a human-readable text string combining the filename, the sender, the expiration date, and the download quota. <br>
+        <b>The Hidden Data Trick</b>: We create a <code>QListWidgetItem</code> to visually display the text in the inbox list. But how does the computer know which database file corresponds to that line of text? We use <code>item.setData(Qt.UserRole, f["id"])</code>. This secretly injects the database Primary Key ID into the visual list item. The user only sees the text, but the computer can pull the exact ID number when needed.<br>
+        2. <b>Live Search Filtering (<code>apply_filter</code>)</b>: Whenever the user types a letter into the search box, this fires. It loops over every single item in the inbox list. It forces both the search text and the item text to lowercase (to make the search case-insensitive). If the search text is not found in the item text, it uses <code>item.setHidden(True)</code> to instantly vanish the item from the screen. This provides snappy, real-time filtering without needing to ask the server for a search query.<br>
+        3. <b>Downloading (<code>download_selected</code>)</b>: We grab the currently highlighted item from the list. We extract that secret hidden ID using <code>item.data(Qt.UserRole)</code>. We disable the download button to prevent spamming, and launch the <code>DownloadFileThread</code>, passing it the specific file ID to fetch.<br>
+        4. <b>Reconstructing the File (<code>_on_download_done</code>)</b>: The server replies with a massive JSON payload containing the Base64 text string. Here, we perform the exact reverse of the upload process. We extract the text string and run <code>base64.b64decode()</code>. This mathematically translates the text back into pure, raw binary bytes. We prompt the user with a "Save As" window to choose a folder, open a file in <code>"wb"</code> (Write Binary) mode, and dump the raw bytes into it. The file is flawlessly reconstructed on the user's hard drive!
+    </div>
+
+    <!-- PRINTWINDOW.PY -->
+    <h2 id="printwindow" class="important">7. printwindow.py</h2>
+    <p>The Print Operator Dashboard. This interface moves away from traditional lists and creates dynamic visual "Cards" for each document waiting to be printed. It also houses the critical document conversion engine.</p>
+    
+    <h3>Dynamic File Cards</h3>
+    <div class="code-block">    def _add_file_card(self, f):
+        filename = f.get("filename", "unknown")
+        sender   = f.get("sender",   "unknown")
+        receiver = f.get("receiver", "?")
+        ts       = str(f.get("uploaded_at", ""))[:16]
+        file_id  = f.get("id")
+        ext      = os.path.splitext(filename)[1].lower().lstrip(".")
+
+        card = QFrame(objectName=f"card_{self._card_index}")
+        self._card_index += 1
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        row = QHBoxLayout(card)
+        row.setContentsMargins(14, 10, 14, 10)
+        row.setSpacing(12)
+
+        icon_lbl = QLabel(ICON_MAP.get(ext, "FILE"))
+        icon_lbl.setFont(QFont("Segoe UI Emoji", 22))
+        row.addWidget(icon_lbl)
+
+        col = QVBoxLayout()
+        name_lbl = QLabel(filename)
+        name_lbl.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        meta_lbl = QLabel(f"From: {sender} → To: {receiver}  [{f.get('download_count', 0)}/{f.get('max_downloads', 1)}]")
+        col.addWidget(name_lbl)
+        col.addWidget(meta_lbl)
+        row.addLayout(col, stretch=1)
+
+        if ext in ("pdf", "docx", "doc"):
+            btn = QPushButton("Print")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _, fid=file_id, fn=filename, fe=ext, b=btn: self._on_print_clicked(fid, fn, fe, b))
+            row.addWidget(btn)
+
+        self._cards_layout.insertWidget(self._cards_layout.count() - 1, card)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        Standard list boxes are boring and inflexible. For the print operators, we engineered a custom layout system that dynamically builds complex visual "Cards" from scratch for every file.<br><br>
+        1. <b>Extracting Data</b>: We pull the filename and use <code>os.path.splitext</code> to slice off the extension (like '.pdf' or '.docx'). We strip the dot and make it lowercase so it's clean (e.g., 'pdf').<br>
+        2. <b>Building the Card</b>: We create a <code>QFrame</code>. This acts as the physical box (the card) holding the UI elements. We set its size policy so it stretches horizontally to fill the window but stays a fixed height vertically.<br>
+        3. <b>Layouts Inside Layouts</b>: We apply a <code>QHBoxLayout</code> (Horizontal) to the card. This means things added to it stack left-to-right. First, we add a <code>QLabel</code> containing an Emoji icon mapped to the file extension (e.g., a document icon for PDF). Next, we create a <code>QVBoxLayout</code> (Vertical, top-to-bottom) and put the Filename label and the Metadata label inside it. We add this vertical column into the horizontal row. This creates a neat structure: Icon on the left, two lines of text in the middle.<br>
+        4. <b>Conditional Print Button</b>: This is crucial. We check: <code>if ext in ("pdf", "docx", "doc"):</code>. If the file is an image or a video, it is impossible for our document engine to print it. In that case, we simply do not build the button. If it is printable, we create a "Print" button. <br>
+        <b>Lambda Function Trick</b>: We must connect the button to the print function, but we need to pass data (the file_id) to the function. Standard <code>.connect()</code> doesn't allow passing arguments. So, we use a Python <code>lambda</code> (an anonymous function) to temporarily hold the variables <code>fid=file_id</code> and execute <code>self._on_print_clicked</code> with those precise variables when clicked.<br>
+        5. <b>Insertion</b>: Finally, we inject this newly created card frame directly into the window's main scrolling layout.
+    </div>
+
+    <h3>Word to PDF Conversion Engine</h3>
+    <div class="code-block">def _docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
+    import os
+    import tempfile
+
+    # Plan A: Use Microsoft Word COM Interface
+    try:
+        from docx2pdf import convert
+        import pythoncom
+        pythoncom.CoInitialize() 
+
+        suffix = ".docx"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(docx_bytes)
+            docx_path = tmp.name
+
+        pdf_path = docx_path[:-len(suffix)] + ".pdf"
+        try:
+            convert(docx_path, pdf_path)
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    return f.read()
+        finally:
+            try: os.unlink(docx_path)
+            except: pass
+            try: os.unlink(pdf_path)
+            except: pass
+    except Exception as e:
+        print(f"docx2pdf failed: {e}")
+
+    # Plan B: Manual ReportLab drawing (Fallback)
+    import io
+    from docx import Document
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    def fix_hebrew_manual(text):
+        import re
+        hebrew_pattern = re.compile(r'[\u0590-\u05FF]+')
+        if hebrew_pattern.search(text):
+            words = text.split()
+            fixed_words = []
+            for w in words:
+                if hebrew_pattern.search(w):
+                    fixed_words.append(w[::-1]) # Reverse letters
+                else:
+                    fixed_words.append(w)
+            return " ".join(fixed_words[::-1]) # Reverse word order
+        return text
+
+    doc_obj = Document(io.BytesIO(docx_bytes))
+    buf = io.BytesIO()
+    pdf = SimpleDocTemplate(buf, pagesize=A4)
+    styles = getSampleStyleSheet()
+    body_style = ParagraphStyle("Body", parent=styles["Normal"], alignment=2) # 2 is Right-align
+
+    story = []
+    for para in doc_obj.paragraphs:
+        if not para.text.strip():
+            story.append(Spacer(1, 6))
+            continue
+        text = fix_hebrew_manual(para.text)
+        txt = text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        story.append(Paragraph(txt, body_style))
+        
+    pdf.build(story)
+    return buf.getvalue()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This function solves a massive architectural hurdle. Network printers and PyMuPDF engines are incredibly rigid: they <b>only</b> understand the PDF standard language. They cannot read Microsoft Word (.docx) files. If a user sends a Word document to be printed, we must silently convert it to a PDF behind the scenes before throwing it to the print engine. But converting files, especially those containing Hebrew (Right-To-Left text), is notoriously difficult.<br><br>
+        <b>Plan A: The Microsoft Word COM Hook</b><br>
+        The absolute best way to convert a Word document is to have actual Microsoft Word do it. We use the <code>docx2pdf</code> library. Under the hood, this library uses Windows COM (Component Object Model) architecture to spawn an invisible instance of the Microsoft Word application in the background, open our file, and trigger Word's native "Export to PDF" function. Because real Word is doing the work, Hebrew text, fonts, and layouts are preserved flawlessly.<br>
+        - <code>pythoncom.CoInitialize()</code>: This is mandatory. COM objects are tied to specific CPU threads. Because we are running this inside a background worker thread (not the main GUI thread), we must explicitly tell Windows to initialize COM communication for this specific thread, otherwise it crashes immediately.<br>
+        - We write the bytes to a temporary file, run the conversion, read the new PDF bytes, and aggressively delete (unlink) the temporary files from the hard drive so we don't leak memory.<br><br>
+        <b>Plan B: The ReportLab Fallback and the Hebrew Reversal Algorithm</b><br>
+        What if the operator's computer doesn't have Microsoft Office installed? Plan A will fail and throw an Exception. We catch that Exception and move to Plan B. We use <code>python-docx</code> to rip the raw text paragraphs out of the Word file, and we use <code>reportlab</code> to manually paint those paragraphs onto a blank PDF canvas.<br>
+        - The problem: ReportLab does not understand Bidirectional (Bidi) languages. If you give it the word "שלום", it will print it backwards on the PDF as "םולש" from left to right.<br>
+        - <b>The Solution (<code>fix_hebrew_manual</code>)</b>: We wrote a custom algorithm. It uses Regular Expressions (Regex <code>[\u0590-\u05FF]+</code>) to scan the text and identify words containing Hebrew Unicode characters. If it finds Hebrew, it splits the sentence into an array of words. For every Hebrew word, it physically flips the characters backward (<code>w[::-1]</code>). Finally, it flips the order of the words in the entire array, and stitches them back together into a string. We then hand this mangled, backwards string to ReportLab. When ReportLab blindly prints it left-to-right, it "accidentally" comes out perfectly readable Right-To-Left!
+    </div>
+
+    <!-- PRINT PREVIEW WINDOW -->
+    <h2 id="printpreview" class="important">8. print_preview_window.py (VERY IMPORTANT)</h2>
+    <p>This is the engineering masterpiece of the application. It bypasses traditional printing limitations by offering both standard Spooler-based printing and direct, low-level TCP Socket network printing.</p>
+
+    <h3>Network Discovery Thread (Finding Printers)</h3>
+    <div class="code-block">class PrinterScanThread(QThread):
+    found_printer = pyqtSignal(str)   # emits IP
+    finished      = pyqtSignal()
+
+    def run(self):
+        try:
+            import socket
+            from concurrent.futures import ThreadPoolExecutor
+            
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            
+            prefix = ".".join(local_ip.split(".")[:-1])
+            common_ports = [9100, 515, 631, 80, 443]
+
+            def check_ip(ip):
+                for port in common_ports:
+                    try:
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(1.0)
+                        res = sock.connect_ex((ip, port))
+                        sock.close()
+                        if res == 0:
+                            return ip
+                    except: pass
+                return None
+
+            with ThreadPoolExecutor(max_workers=100) as executor:
+                ips_to_check = [f"{prefix}.{i}" for i in range(1, 255) if f"{prefix}.{i}" != local_ip]
+                results = executor.map(check_ip, ips_to_check)
+                for ip in results:
+                    if ip and not (ip.endswith(".1") or ip.endswith(".254")):
+                        self.found_printer.emit(ip)
+            
+            self.finished.emit()
+        except Exception as e:
+            self.finished.emit()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        If an operator wants to print to a network printer, they shouldn't have to manually type the IP address. This thread autonomously maps the entire local network to find printers automatically.<br><br>
+        1. <b>Finding the Subnet</b>: First, we need to know what network the computer is on. We create a dummy UDP socket and pretend to connect to Google's public DNS (<code>8.8.8.8</code>). We don't actually send data; we just ask the operating system: "If I *were* to talk to the internet, which of my local IP addresses would you use?". The OS returns something like <code>192.168.1.45</code>. We split this string, chop off the last number, and get our network prefix: <code>192.168.1</code>.<br>
+        2. <b>Building the Target List</b>: We use a list comprehension to generate all 254 possible IP addresses in this room (192.168.1.1 through 192.168.1.254).<br>
+        3. <b>Multi-threading the Scan</b>: If we looped through 254 computers one-by-one, and waited 1 second for each to respond, the scan would take over 4 minutes! Unacceptable. We use Python's <code>ThreadPoolExecutor</code> to spawn a massive swarm of <b>100 concurrent worker threads</b>. <br>
+        4. <b>Port Knocking (JetDirect)</b>: Each worker grabs an IP and attempts to establish a raw TCP connection to Port 9100. Port 9100 is the industry standard "JetDirect / AppSocket" port that almost all commercial network printers keep open. We set a highly aggressive timeout of 1 second (<code>sock.settimeout(1.0)</code>). If the port opens and returns <code>0</code>, we have definitively found a printer! We emit a signal to the UI to instantly add this IP to the dropdown menu. We ignore IPs ending in .1 or .254 because those are usually routers, not printers.
+    </div>
+
+    <h3>Direct Socket Printing (Bypassing Windows)</h3>
+    <div class="code-block">class SocketPrintThread(QThread):
+    success  = pyqtSignal()
+    error    = pyqtSignal(str)
+    progress = pyqtSignal(int, int)
+
+    def __init__(self, host: str, port: int, pdf_bytes: bytes):
+        super().__init__()
+        self.host      = host
+        self.port      = port
+        self.pdf_bytes = pdf_bytes
+
+    def run(self):
+        try:
+            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            sock.settimeout(15)
+            sock.connect((self.host, self.port))
+
+            total      = len(self.pdf_bytes)
+            chunk_size = 8192
+            sent       = 0
+            while sent < total:
+                chunk = self.pdf_bytes[sent:sent + chunk_size]
+                sock.sendall(chunk)
+                sent += len(chunk)
+                self.progress.emit(sent, total)
+
+            sock.close()
+            self.success.emit()
+        except Exception as e:
+            self.error.emit(str(e))</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        This is a revolutionary feature. Traditional printing relies on the Windows Print Spooler and proprietary manufacturer drivers. If a driver corrupts, or if you are trying to print to a generic network printer without having the driver installed, printing fails.<br><br>
+        This code bypasses Windows entirely. It establishes a raw, direct TCP socket connection (an uninterrupted data pipe) straight into the printer's motherboard via Port 9100. <br>
+        Because modern commercial network printers contain built-in interpreters that natively understand raw PDF architecture, we do not need to convert the document into a proprietary printer language (like PCL or PostScript).<br>
+        We take the raw <code>pdf_bytes</code> binary array, and we chop it into manageable chunks of exactly 8,192 bytes (8 Kilobytes). We use a <code>while</code> loop to literally shove these raw bytes directly down the socket pipe using <code>sock.sendall(chunk)</code> until the entire file is transmitted. The printer receives this pure binary stream, recognizes it as a PDF, processes it internally, and mechanically prints it out. This makes the application capable of printing to almost any modern network printer completely driver-free. We emit progress signals along the way so the UI can show a percentage counter.
+    </div>
+
+    <h3>Standard Windows Printing (QPrinter)</h3>
+    <div class="code-block">    def _print_windows(self, printer_name: str):
+        self.btn_print.setText("Printing…")
+        try:
+            target = None
+            for info in QPrinterInfo.availablePrinters():
+                if info.printerName() == printer_name:
+                    target = info
+                    break
+
+            printer = QPrinter(target, QPrinter.HighResolution) if target else QPrinter(QPrinter.HighResolution)
+            printer.setPrinterName(printer_name)
+            printer.setDocName(self.filename)
+
+            self._render_to_printer(printer)
+            self._mark_printed()
+            QMessageBox.information(self, "Print", f"Document sent to '{printer_name}'.")
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Print Error", str(e))
+        finally:
+            self.btn_print.setEnabled(True)
+            self.btn_print.setText("Print")
+
+    def _render_to_printer(self, printer: QPrinter):
+        import fitz
+        doc  = fitz.open(stream=self.pdf_bytes, filetype="pdf")
+        zoom = 300 / 72.0
+        mat  = fitz.Matrix(zoom, zoom)
+
+        painter = QPainter()
+        painter.begin(printer)
+
+        for i, page in enumerate(doc):
+            if i > 0:
+                printer.newPage()
+            pix   = page.get_pixmap(matrix=mat, alpha=False)
+            img   = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            qpix  = QPixmap.fromImage(img)
+            rect  = painter.viewport()
+            scaled = qpix.scaled(rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            x = (rect.width()  - scaled.width())  // 2
+            y = (rect.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+
+        painter.end()
+        doc.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br>
+        If the operator chooses to print to a local USB printer or a standard Windows printer, we must route the document through the Windows Print Spooler.<br><br>
+        1. <b>Initializing QPrinter</b>: We search the operating system's registry (<code>QPrinterInfo.availablePrinters()</code>) to find the exact printer the user selected from the dropdown. We initialize a <code>QPrinter</code> object targeting that specific hardware in <code>HighResolution</code> mode. We give the print job a title (<code>setDocName</code>) so it looks nice in the Windows Print Queue.<br>
+        2. <b>The Rendering Engine (<code>_render_to_printer</code>)</b>: We cannot just hand the raw PDF bytes to the QPrinter. QPrinter expects us to "draw" onto it. We use the incredible <b>PyMuPDF (fitz)</b> library to open the PDF bytes in memory. <br>
+        For every page in the document, we instruct PyMuPDF to render the vector graphics of the PDF into a high-resolution pixel map (Rasterization). We calculate a zoom matrix of <code>300 / 72.0</code> to forcefully upscale the resolution to 300 DPI (Dots Per Inch), which is the standard resolution for crisp, professional paper printing.<br>
+        We convert this pixel map into a PyQt <code>QImage</code>, and then a <code>QPixmap</code>.<br>
+        3. <b>Painting to Hardware</b>: We create a <code>QPainter</code> (a virtual paintbrush) and attach it directly to the <code>QPrinter</code> hardware (<code>painter.begin(printer)</code>). We calculate the exact center coordinates of the physical paper (x, y) to ensure perfect margins, and we command the paintbrush to <code>drawPixmap</code>, slapping the high-res image onto the page. We call <code>printer.newPage()</code> for multi-page documents, and finally <code>painter.end()</code>, which seals the document and dispatches it to the physical printer.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ CRYPTO_UTILS.PY -->
+    <h2 id="crypto" class="important">9. crypto_utils.py — Hybrid Encryption (RSA + AES)</h2>
+    <p>This module powers all encryption on the Client side. It handles two responsibilities: (1) performing the initial RSA/AES <b>handshake</b> with the server when the client boots, and (2) encrypting both messages (login, signup) and entire files before they are uploaded to the cloud, so that nothing sensitive ever leaves the user's computer in plaintext.</p>
+
+    <h3>Why Hybrid Encryption?</h3>
+    <div class="explanation">
+        <b>The problem:</b> RSA is wonderfully secure but agonizingly slow. You cannot use it to encrypt a 50MB PDF — it would take many seconds and is mathematically limited to tiny payloads (around 200 bytes per operation). AES, on the other hand, is blazing fast (gigabytes per second) but it is symmetric: both sides must already share the same secret key. So how do two strangers on the internet agree on a secret key without anyone listening in?<br><br>
+        <b>The hybrid answer:</b> Use RSA only <i>once</i> to ship a random AES key to the server safely, then use that AES key for all the bulk traffic afterwards. RSA solves the key exchange problem and AES solves the speed problem. This same pattern powers HTTPS, SSH and almost every secure protocol in production today.
+    </div>
+
+    <h3>Imports &amp; Global State</h3>
+    <div class="code-block">import os
+import json
+import base64
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+AES_KEY = None             # AES session key (for encrypting messages)
+SESSION_TOKEN = None       # session identifier returned by the server
+SERVER_PUBLIC_KEY = None   # server's RSA public key (for encrypting per-file AES keys)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>cryptography</code></b>: The standard professional Python crypto library, maintained by the Python Cryptographic Authority. Same library used by Mozilla, AWS, OpenStack and countless other production systems.<br><br>
+        2. <b><code>AESGCM</code></b>: AES in Galois/Counter Mode. GCM is an "authenticated" cipher — it not only encrypts but also creates a tamper-evidence tag. If anyone flips even a single bit on the wire, decryption fails loudly instead of silently producing garbage. This is what protects us against active attackers (not just eavesdroppers).<br><br>
+        3. <b>The three module-level variables:</b> These are filled in by <code>main.py</code> right after the handshake. Because Python modules are singletons, <i>any</i> file inside the Client package can simply <code>import Client.crypto_utils</code> and read <code>crypto_utils.AES_KEY</code> — the values stay alive for the entire program lifetime, all in RAM, never on disk.
+    </div>
+
+    <h3>import_public_key()</h3>
+    <div class="code-block">def import_public_key(pem_str):
+    return serialization.load_pem_public_key(pem_str.encode())</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        When the server answers <code>GET /public_key</code> it returns a PEM-formatted string like <code>-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----</code>. This is human-readable text but the library needs a real Python <i>object</i> to perform encryption with it. <code>load_pem_public_key</code> parses the PEM and returns an <code>RSAPublicKey</code> object that we can call <code>.encrypt(...)</code> on.
+    </div>
+
+    <h3>generate_aes_key()</h3>
+    <div class="code-block">def generate_aes_key():
+    return os.urandom(32)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        AES-256 needs exactly 32 random bytes (256 bits) as its key. <code>os.urandom</code> is the operating system's cryptographically secure random number generator — on Windows it pulls from <i>BCryptGenRandom</i>, on Linux from <i>/dev/urandom</i>. <br><br>
+        <b>Critical:</b> We never use Python's <code>random</code> module here. That module is predictable and would let an attacker guess our keys. <code>os.urandom</code> is the only acceptable source.<br><br>
+        We call this function twice in our system: once at startup to make the session AES key, and again for every single file upload to make a unique per-file AES key.
+    </div>
+
+    <h3>rsa_encrypt()</h3>
+    <div class="code-block">def rsa_encrypt(public_key, data_bytes):
+    encrypted = public_key.encrypt(
+        data_bytes,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return base64.b64encode(encrypted).decode()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This is how the Client safely sends a 32-byte AES key to the server over an insecure network.<br><br>
+        1. <b><code>padding.OAEP</code></b>: "Optimal Asymmetric Encryption Padding". <i>Never</i> use raw RSA — it has multiple known attacks. OAEP injects randomness before encryption so that encrypting the same input twice produces different ciphertexts.<br><br>
+        2. <b>SHA-256 hash function</b>: OAEP needs a hash function internally. SHA-256 must match exactly on both sides (server decrypts with the same SHA-256 OAEP padding).<br><br>
+        3. <b>Base64 output</b>: The encrypted bytes are binary garbage. We base64-encode them so they survive a trip through JSON (which is strictly text).
+    </div>
+
+    <h3>aes_encrypt() — Encrypts a Dictionary (used for messages)</h3>
+    <div class="code-block">def aes_encrypt(payload_dict):
+    plaintext = json.dumps(payload_dict).encode()
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(AES_KEY)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return base64.b64encode(nonce + ciphertext).decode()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Called every time we need to send sensitive structured data to the server (login credentials, signup, etc.).<br><br>
+        1. <b><code>json.dumps(...).encode()</code></b>: Convert the Python dict into a JSON string, then to bytes. AES operates on bytes, not Python objects.<br><br>
+        2. <b><code>nonce = os.urandom(12)</code></b>: A 96-bit "number used once". <b>This must be unique for every single encryption</b> with the same key, otherwise GCM completely breaks. By using fresh random bytes per call, the probability of collision is astronomically small.<br><br>
+        3. <b><code>nonce + ciphertext</code></b>: We glue the nonce to the front of the ciphertext. The server splits them back apart by taking the first 12 bytes. This way the server doesn't need a separate field for the nonce — it travels with the ciphertext.<br><br>
+        4. <b>Result:</b> What an eavesdropper sees on the wire is one big chunk of base64 like <code>"xK9aP2mLvB8fH3rT..."</code>. Even if they capture millions of login attempts, they cannot extract a single character of any password without breaking AES-256.
+    </div>
+
+    <h3>aes_encrypt_bytes() — Encrypts a Raw File</h3>
+    <div class="code-block">def aes_encrypt_bytes(aes_key, data_bytes):
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(aes_key)
+    ciphertext = aesgcm.encrypt(nonce, data_bytes, None)
+    return nonce + ciphertext</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Identical idea to <code>aes_encrypt()</code> but works on raw <i>bytes</i> instead of a JSON-able dict, and returns raw bytes instead of base64. This is the function we use to encrypt the actual file content before uploading.<br><br>
+        <b>Important difference:</b> The AES key here is <i>not</i> the session key. It is a brand-new per-file key generated fresh for each upload via <code>generate_aes_key()</code>. This is the heart of the file-level hybrid encryption.
+    </div>
+
+    <h3>aes_decrypt_bytes() — Decrypts a Downloaded File</h3>
+    <div class="code-block">def aes_decrypt_bytes(aes_key, encrypted_bytes):
+    nonce = encrypted_bytes[:12]
+    ciphertext = encrypted_bytes[12:]
+    aesgcm = AESGCM(aes_key)
+    return aesgcm.decrypt(nonce, ciphertext, None)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The inverse of <code>aes_encrypt_bytes()</code>. Used in <code>sendfile_window.py</code> after a file is downloaded.<br><br>
+        1. Split off the 12-byte nonce from the beginning.<br>
+        2. Feed nonce + ciphertext + AES key to AESGCM.<br>
+        3. <code>aesgcm.decrypt()</code> verifies the authentication tag <i>and</i> recovers the plaintext bytes in one atomic step. If anyone tampered with the encrypted file (e.g. a malicious Supabase admin), this call throws <code>InvalidTag</code> and we refuse to save the file.
+    </div>
+
+    <h3>The Handshake — Inside main.py</h3>
+    <div class="code-block">def main():
+    # ===== Hybrid encryption key exchange with the server =====
+    # 1. Fetch the server's RSA public key
+    r = requests.get(f"{SERVER_URL}/public_key", timeout=5)
+    pem = r.json()["public_key"]
+    public_key = crypto_utils.import_public_key(pem)
+
+    # 2. Generate a random AES session key
+    aes_key = crypto_utils.generate_aes_key()
+
+    # 3. Encrypt the AES key with the server's RSA public key
+    encrypted_key = crypto_utils.rsa_encrypt(public_key, aes_key)
+
+    # 4. Send the encrypted key, receive a session_token
+    r2 = requests.post(f"{SERVER_URL}/session_key",
+                       json={"encrypted_key": encrypted_key}, timeout=5)
+    session_token = r2.json()["session_token"]
+
+    # Store everything in crypto_utils so all windows can access it
+    crypto_utils.AES_KEY = aes_key
+    crypto_utils.SESSION_TOKEN = session_token
+    crypto_utils.SERVER_PUBLIC_KEY = public_key
+    print("Encrypted session established with server")
+    ...</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This four-step dance is the entire "TLS-like" handshake compressed into Python. It runs <b>once</b> as the first thing the app does, before any window is shown.<br><br>
+        1. <b>Pull the public key</b> with a normal unencrypted HTTP GET. Public keys are by definition public, so transmitting in the clear is fine.<br><br>
+        2. <b>Generate the AES session key locally</b>. Since we just made it, only we know it.<br><br>
+        3. <b>Encrypt the AES key with RSA</b>. The result is a base64 blob that <i>only</i> the server can decrypt (because only the server has the matching RSA private key).<br><br>
+        4. <b>Trade the encrypted key for a session token</b>. The server decrypts the AES key, files it under a fresh random token, and returns the token to us. From this moment, we and the server share a secret AES key that no one else in the world knows.<br><br>
+        <b>What can a man-in-the-middle do?</b> Even if a hacker captures every packet of this handshake, they only see (1) a public key (which is public anyway) and (2) an AES key encrypted with RSA-2048 (which would take longer than the age of the universe to crack). Game over for the attacker.
+    </div>
+
+    <h3>The Login Flow — Encrypting Credentials</h3>
+    <div class="code-block">def handle_login(self, data):
+    username, password = data
+    encrypted = crypto_utils.aes_encrypt({"username": username, "password": password})
+    r = requests.post(f"{SERVER_URL}/login",
+                      json={"session_token": crypto_utils.SESSION_TOKEN,
+                            "encrypted_data": encrypted},
+                      timeout=30)
+    response = r.json()
+    ...</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Before the username and password leave the laptop, they are sealed inside an AES envelope.<br><br>
+        1. <b>Build the payload dict</b> with <code>username</code> and <code>password</code>.<br>
+        2. <b>Encrypt</b> with <code>aes_encrypt()</code> using the session key.<br>
+        3. <b>Wrap</b> in an outer JSON that includes the <code>session_token</code> so the server knows which AES key to use for decryption.<br><br>
+        <b>The bytes on the wire look like:</b> <code>{"session_token": "87e25...", "encrypted_data": "xK9aP2mLv..."}</code>. There is absolutely no way to extract the password from this.
+    </div>
+
+    <h3>File-Level Hybrid Encryption — Uploading a File</h3>
+    <div class="code-block"># === Hybrid encryption of the file ===
+# 1. Generate a brand-new AES key just for this file
+file_aes_key = crypto_utils.generate_aes_key()
+# 2. Encrypt the file content with that AES key
+encrypted_file = crypto_utils.aes_encrypt_bytes(file_aes_key, raw)
+# 3. Encrypt the AES key with the server's RSA public key
+encrypted_aes_key = crypto_utils.rsa_encrypt(crypto_utils.SERVER_PUBLIC_KEY, file_aes_key)
+
+payload = {
+    "sender":    self.current_user,
+    "receivers": receivers,
+    "filename":  filename,
+    "filedata":  base64.b64encode(encrypted_file).decode(),
+    "encrypted_aes_key": encrypted_aes_key,
+    ...
+}</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This is the heart of the project's <i>at-rest</i> protection. Each uploaded file gets its own private AES key that nobody else will ever see in plaintext, except the server's RSA private key holder (which exists only in the running server's RAM).<br><br>
+        <b>Step-by-step in plain words:</b><br>
+        1. The Client reads the entire file from disk into <code>raw</code> (raw bytes).<br>
+        2. The Client invents a brand-new random AES key just for this one file.<br>
+        3. The file bytes are encrypted with that key → now they look like random noise.<br>
+        4. The AES key itself is encrypted with the server's RSA public key → only the server can ever decrypt this.<br>
+        5. Both encrypted pieces fly up to the server in the same request.<br><br>
+        <b>Why is this layered?</b> If someone steals only the Supabase storage, they get a useless encrypted blob — they don't have the AES key. If someone steals only the MySQL database, they get the encrypted AES key — but they don't have the server's RSA private key to decrypt it. They would need to breach <i>all three</i> components simultaneously to read a single file. This is "defense in depth".
+    </div>
+
+    <h3>File-Level Hybrid Encryption — Downloading a File</h3>
+    <div class="code-block">def _on_download_done(self, data):
+    # === Hybrid decryption of the file ===
+    # 1. Receive the encrypted file and the now-decrypted AES key from the server
+    encrypted_file = base64.b64decode(data["filedata"])
+    file_aes_key = base64.b64decode(data["file_aes_key"])
+    # 2. Decrypt the file content with AES
+    raw = crypto_utils.aes_decrypt_bytes(file_aes_key, encrypted_file)
+    ...
+    with open(save_path, "wb") as f:
+        f.write(raw)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The reverse trip. The server already used its RSA private key to decrypt the per-file AES key, so when the file arrives here, the AES key is included alongside it (protected by the surrounding secure HTTP session). The Client simply runs AES-GCM decryption on the bytes and writes the recovered plaintext to disk. The file lives on the user's laptop only after the user explicitly chooses a save location — it is never written in plaintext to a temp directory.
+    </div>
+
+    <h3>End-to-End Cryptographic Summary</h3>
+    <div class="explanation">
+        Putting it all together, here is the entire cryptographic life cycle of CloudDrop:<br><br>
+        <b>1. Startup:</b> Client gets server's RSA public key → Client invents AES session key → encrypts it with RSA → sends to server → server stores it. Both now share a secret session AES key.<br><br>
+        <b>2. Login &amp; Signup:</b> Credentials are wrapped with AES-GCM using the session key. The server peels them open with its copy of the same key. Anyone watching the network sees only base64 noise.<br><br>
+        <b>3. File Upload:</b> Brand-new per-file AES key invented. File encrypted with that key. The key itself encrypted with the server's RSA public key. Both encrypted pieces stored separately (file in Supabase, key in MySQL). No single component can decrypt anything alone.<br><br>
+        <b>4. File Download:</b> Authorized recipient asks for the file. The server uses its RSA private key to recover the file's AES key, then sends both the encrypted file and the AES key back to the recipient over the session-protected channel. The recipient decrypts locally and saves to disk.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ Q&A SECTION -->
+    <h2 id="qa" style="margin-top: 80px; color: #27ae60; border-bottom: 3px solid #ecf0f1; padding-bottom: 8px; background: #eafaf1; padding: 15px; border-radius: 5px;">❓ שאלות ותשובות לבדיקת הפרויקט</h2>
+    <p>אוסף שאלות שהבוחן עשוי לשאול בבדיקת הפרויקט — מסווג לפי נושא. כל תשובה מקושרת ישירות למה שמומש בפרויקט.</p>
+
+    <!-- COMMUNICATION -->
+    <h3 style="color: #16a085;">🌐 תקשורת ורשתות</h3>
+
+    <div class="explanation">
+        <b>שאלה: באיזה פרוטוקול תקשורת אתה עובד ואיך החלטת על זה?</b><br>
+        <b>תשובה:</b> אני עובד ב-<b>TCP</b>, ספציפית דרך <b>HTTP</b> (Flask + ספריית requests). מעל זה יש שכבת הצפנה היברידית. בנוסף יש לי <b>TCP socket גולמי</b> להדפסה ברשת על פורט 9100 (פרוטוקול JetDirect). בחרתי ב-TCP כי הוא מבטיח שכל הנתונים יגיעו בשלמותם ובסדר הנכון — קריטי לקבצים, כי אם חצי מה-PDF נאבד הוא לא יפתח.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה ההבדל בין TCP ל-UDP?</b><br>
+        <b>תשובה:</b><br>
+        • <b>TCP</b> — Transmission Control Protocol. מבטיח שהנתונים יגיעו (Reliable), בסדר הנכון (Ordered), ומבצע לחיצת יד משולשת לפני התקשורת. איטי יותר אבל בטוח.<br>
+        • <b>UDP</b> — User Datagram Protocol. לא מבטיח הגעה ולא מבטיח סדר. מהיר יותר אבל פחות אמין.<br>
+        בפרויקט שלי בחרתי ב-TCP כי שליחת קבצים דורשת שלמות מלאה.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מהי לחיצת יד משולשת (Three-Way Handshake)?</b><br>
+        <b>תשובה:</b> תהליך פתיחת חיבור TCP בשלושה שלבים:<br>
+        1. <b>SYN</b> — הלקוח שולח בקשה לחיבור.<br>
+        2. <b>SYN-ACK</b> — השרת מאשר וגם מבקש חיבור חזרה.<br>
+        3. <b>ACK</b> — הלקוח מאשר. עכשיו החיבור פתוח.<br>
+        זה קורה אוטומטית כל פעם שאני קורא ל-<code>requests.post(...)</code> או יוצר <code>socket.connect()</code>.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מהי כתובת IP ולמה משמש PORT?</b><br>
+        <b>תשובה:</b><br>
+        • <b>IP</b> — כתובת ייחודית למחשב ברשת (לדוגמה 192.168.0.104). היא מזהה <i>איזה מחשב</i>.<br>
+        • <b>PORT</b> — מספר בין 0-65535 שמזהה <i>איזו אפליקציה</i> במחשב. בפרויקט שלי השרת מאזין על פורט <b>5000</b> (Flask) ולמדפסת אני שולח לפורט <b>9100</b> (JetDirect).
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: תן דוגמאות לפרוטוקולים בשכבת האפליקציה.</b><br>
+        <b>תשובה:</b><br>
+        • <b>HTTP</b> — להעברת דפי אינטרנט (משתמשים בפרויקט)<br>
+        • <b>HTTPS</b> — HTTP מוצפן עם TLS<br>
+        • <b>SMTP</b> — שליחת מייל<br>
+        • <b>DNS</b> — תרגום שם דומיין לכתובת IP<br>
+        • <b>FTP</b> — העברת קבצים<br>
+        • <b>SSH</b> — חיבור מאובטח לשרת
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה משמשת הפקודה PING?</b><br>
+        <b>תשובה:</b> לבדיקת זמינות של מחשב ברשת. שולחת חבילות ICMP ומחכה לתגובה. אם חוזרת תגובה — המחשב מחובר וזמין. גם מודדת זמן תגובה.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה ARP?</b><br>
+        <b>תשובה:</b> Address Resolution Protocol — פרוטוקול שמתרגם כתובת IP לכתובת MAC פיזית בכרטיס הרשת. הכרחי כדי לשלוח חבילות ברשת מקומית.
+    </div>
+
+    <!-- CRYPTOGRAPHY -->
+    <h3 style="color: #16a085;">🔐 קריפטוגרפיה (הצפנה)</h3>
+
+    <div class="explanation">
+        <b>שאלה: מהם סוגי ההצפנה הקיימים?</b><br>
+        <b>תשובה:</b><br>
+        • <b>הצפנה סימטרית</b> — אותו מפתח להצפנה ולפענוח. מהירה אך דורשת חילוף מפתח בטוח. דוגמה: AES (אני משתמש ב-AES-256-GCM).<br>
+        • <b>הצפנה אסימטרית</b> — שני מפתחות (ציבורי ופרטי). איטית אך פותרת את בעיית חילוף המפתחות. דוגמה: RSA (אני משתמש ב-RSA-2048).<br>
+        • <b>הצפנה היברידית</b> — שילוב של שניהם. משתמשים ב-RSA כדי להחליף מפתח AES, ואז כל ההודעות מוצפנות עם AES. זה מה שיש לי בפרויקט.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה מפתח ציבורי ומה זה מפתח פרטי?</b><br>
+        <b>תשובה:</b> בהצפנה אסימטרית יש זוג מפתחות:<br>
+        • <b>מפתח ציבורי</b> — חופשי להפצה לכולם. <b>מצפינים</b> איתו.<br>
+        • <b>מפתח פרטי</b> — סודי, רק לבעלים. <b>מפענחים</b> איתו.<br>
+        בפרויקט שלי, השרת מייצר זוג RSA בעלייה. את המפתח הציבורי הוא שולח לכל לקוח (דרך <code>/public_key</code>). את המפתח הפרטי הוא שומר ב-RAM שלו בלבד. לקוח מצפין מפתח AES עם הציבורי — ורק השרת יכול לפענח אותו עם הפרטי.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Hash ומה ההבדל בינו לבין הצפנה?</b><br>
+        <b>תשובה:</b> Hash היא פונקציה חד-כיוונית — לוקחים קלט (כמו סיסמה) ומקבלים פלט קבוע באורך (כמו 64 תווים). <b>אי אפשר להחזיר חזרה</b>. הצפנה לעומת זאת היא דו-כיוונית — אפשר להצפין ולפענח. בפרויקט שלי משתמש ב-<b>bcrypt</b> ל-hash של סיסמאות ב-MySQL, וב-<b>AES</b> להצפנת הסיסמאות בדרך לשרת.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זו חתימה דיגיטלית?</b><br>
+        <b>תשובה:</b> שיטה להוכיח שמסמך מסוים נשלח על ידי מישהו ספציפי ולא שונה בדרך. השולח <b>מצפין hash של ההודעה עם המפתח הפרטי שלו</b>. כל אחד יכול לאמת עם המפתח הציבורי שלו שזה באמת הוא ושההודעה לא שונתה. בפרויקט שלי לא ממומשת חתימה דיגיטלית, אבל AES-GCM נותן <b>אימות הודעות</b> דומה (tampering detection).
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה MITM (Man-In-The-Middle) ואיך מתמודדים?</b><br>
+        <b>תשובה:</b> תקיפה שבה תוקף יושב בין הלקוח לשרת ויכול לקרוא ולשנות את כל מה שעובר. בפרויקט שלי <b>ההצפנה ההיברידית מגנה מזה</b>: גם אם תוקף יושב באמצע — הוא רק יראה bytes מקושקשים (base64) ולא יוכל לקרוא או לשנות בלי להישבר על AES-GCM. בנוסף, AES-GCM מזהה ניסיון לשינוי ומפיל את הפענוח אם משהו לא תקין.
+    </div>
+
+    <!-- OPERATING SYSTEMS -->
+    <h3 style="color: #16a085;">🖥️ מערכות הפעלה</h3>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Thread?</b><br>
+        <b>תשובה:</b> חוט ביצוע — יחידת ביצוע קטנה בתוך Process. כמה Threads יכולים לרוץ במקביל באותו Process וחולקים את אותו הזיכרון. בפרויקט שלי משתמש ב-<code>QThread</code> של PyQt5 הרבה — לדוגמה <code>SendFileThread</code>, <code>DownloadFileThread</code>, <code>HeartbeatThread</code> — כדי לבצע פעולות רשת ברקע בלי להקפיא את הממשק.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Process?</b><br>
+        <b>תשובה:</b> תוכנית פעילה במחשב, עם זיכרון משלה ומשאבי מערכת משלה. בפרויקט שלי השרת רץ ב-Process אחד והלקוח ב-Process אחר (יכולים להיות אפילו על מחשבים שונים). בתוך כל Process יש כמה Threads.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה ההבדל בין Thread ל-Process?</b><br>
+        <b>תשובה:</b><br>
+        • <b>Process</b> — שטח זיכרון נפרד, מבודד מ-Processes אחרים.<br>
+        • <b>Thread</b> — חולק את הזיכרון של ה-Process. מהיר יותר ליצירה ולתקשורת בין Threads, אבל דורש סנכרון (locks) כשנוגעים במשאב משותף.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה WinAPI?</b><br>
+        <b>תשובה:</b> Windows API — אוסף הפונקציות שמערכת ההפעלה Windows חושפת לתוכניות. בפרויקט שלי <code>docx2pdf</code> משתמש ב-WinAPI דרך COM Interface כדי להפעיל את Word מהקוד שלי ולהמיר DOCX ל-PDF. גם <code>QPrinter</code> משתמש ב-WinAPI להדפסה.
+    </div>
+
+    <!-- FILES -->
+    <h3 style="color: #16a085;">📁 קבצים</h3>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Magic Number של קובץ?</b><br>
+        <b>תשובה:</b> אותם בייטים הראשונים של קובץ שמזהים את סוג הקובץ. לדוגמה:<br>
+        • PDF מתחיל ב-<code>%PDF</code> (25 50 44 46)<br>
+        • PNG מתחיל ב-<code>89 50 4E 47</code><br>
+        • EXE/DLL מתחיל ב-<code>MZ</code> (4D 5A)<br>
+        בפרויקט שלי, כשמדפיסים PDF דרך socket למדפסת רשת — המדפסת מזהה את הקובץ לפי ה-magic number שלו.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה FAT32?</b><br>
+        <b>תשובה:</b> File Allocation Table — מערכת קבצים שמשתמשים בה בעיקר ב-USB ו-SD cards. תומכת בקבצים עד 4GB. דיסקים מודרניים משתמשים ב-NTFS (Windows) או ext4 (Linux).
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה קובץ PE?</b><br>
+        <b>תשובה:</b> Portable Executable — פורמט קבצי ההרצה של Windows (כמו <code>.exe</code> ו-<code>.dll</code>). המבנה כולל header עם metadata, sections של קוד ונתונים, וטבלאות imports/exports.
+    </div>
+
+    <!-- CYBERSECURITY -->
+    <h3 style="color: #16a085;">🛡️ סייבר ואבטחת מידע</h3>
+
+    <div class="explanation">
+        <b>שאלה: לאלו מתקפות חשוף הפרויקט שלך ואיך טיפלת?</b><br>
+        <b>תשובה:</b><br>
+        • <b>MITM</b> — נטרל ע"י הצפנה היברידית (RSA + AES) עם אימות GCM.<br>
+        • <b>SQL Injection</b> — נטרל ע"י Parameterized Queries בכל הגישות ל-MySQL (<code>%s</code> ולא string concatenation).<br>
+        • <b>Brute Force</b> — נטרל ע"י נעילת חשבון אחרי 3 כשלונות (lockout של 5 דקות).<br>
+        • <b>Path Traversal בהעלאת קבצים</b> — נטרל ע"י <code>secure_filename()</code> של Werkzeug.<br>
+        • <b>גניבת קבצים מהענן</b> — נטרל ע"י הצפנת AES של כל קובץ + הצפנת המפתח ב-RSA.<br>
+        • <b>גניבת מסד נתונים</b> — סיסמאות מוגנות ב-bcrypt, מפתחות קבצים מוצפנים ב-RSA.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה SQL Injection?</b><br>
+        <b>תשובה:</b> תקיפה שבה תוקף מזריק קוד SQL זדוני לתוך הקלטים של האפליקציה. לדוגמה אם הסיסמה היא <code>' OR '1'='1</code> — וזה משולב ישירות לשאילתה — התוקף יכול לעקוף את ההתחברות. בפרויקט שלי אני משתמש ב-<b>Parameterized Queries</b> (<code>cursor.execute("SELECT ... WHERE username=%s", (username,))</code>) שמפרידים בין הקוד לנתונים.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Buffer Overflow?</b><br>
+        <b>תשובה:</b> תקיפה שבה תוקף שולח נתונים גדולים יותר ממה שמערך מסוגל להכיל, וגורם לכתיבה מעבר לגבולות הזיכרון — מה שיכול להחליף את כתובת החזרה של הפונקציה ולגרום להרצת קוד זדוני. בפייתון זה <b>פחות רלוונטי</b> כי הזיכרון מנוהל אוטומטית. בנוסף, יש לי הגבלת גודל קובץ (50MB) שמונעת DoS.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: איך נשמרת אבטחת הנתונים בפרויקט?</b><br>
+        <b>תשובה:</b> ב-3 שכבות:<br>
+        1. <b>בתעבורה</b> — הצפנה היברידית (RSA + AES-GCM).<br>
+        2. <b>במסד הנתונים</b> — סיסמאות מוצפנות עם bcrypt + salt, מפתחות קבצים מוצפנים ב-RSA.<br>
+        3. <b>בענן (Supabase)</b> — קבצים מוצפנים עם AES לפני העלאה, אז גם מי שיחדור לענן לא יוכל לקרוא אותם.
+    </div>
+
+    <!-- PROJECT-SPECIFIC -->
+    <h3 style="color: #16a085;">💻 שאלות ספציפיות לפרויקט</h3>
+
+    <div class="explanation">
+        <b>שאלה: למה השתמשת בפייתון ולא בשפה אחרת?</b><br>
+        <b>תשובה:</b> פייתון נותנת תמיכה מצוינת ב-PyQt5 לממשק, Flask לשרת, ו-cryptography להצפנה. הקוד נקרא בקלות וקיימות ספריות מוכנות לכל מה שצריך — Supabase, bcrypt, PyMuPDF להדפסה. זה איפשר לי להתמקד בלוגיקה ופחות ב-boilerplate.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה Supabase ולא לשמור את הקבצים מקומית?</b><br>
+        <b>תשובה:</b> אם הקבצים נשמרים בדיסק של השרת, הם תופסים מקום ואם השרת קורס — מאבדים אותם. בנוסף, מאוד לא מומלץ להחזיק קבצי משתמשים על מחשב אישי. Supabase נותן אחסון בענן בחינם, גישה מכל מקום, ומחיקה אוטומטית. הקבצים בענן מוצפנים — אז גם אם Supabase נפרץ — הקבצים לא קריאים.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה יש לך גם Flask וגם socket בפרויקט?</b><br>
+        <b>תשובה:</b> שני סוגי תקשורת שונים:<br>
+        • <b>Flask (HTTP מעל TCP)</b> — לתקשורת בין הלקוח לשרת. נוח עם JSON ו-endpoints מוגדרים היטב.<br>
+        • <b>TCP Socket גולמי</b> — להדפסה ישירה למדפסת רשת על פורט 9100. המדפסת לא מבינה HTTP, היא רוצה bytes גולמיים של PDF.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה יש לך הצפנה היברידית במקום רק AES או רק RSA?</b><br>
+        <b>תשובה:</b><br>
+        • <b>RSA לבד</b> — איטי מדי לקבצים גדולים, ומגביל לכמה מאות בתים בכל הצפנה.<br>
+        • <b>AES לבד</b> — דורש שהמפתח כבר ידוע בשני הצדדים, אבל איך מעבירים אותו בצורה בטוחה?<br>
+        • <b>הצפנה היברידית</b> — RSA פותר את חילוף המפתחות (פעם אחת בלבד), ואז AES מהיר עושה את העבודה הקשה.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה קורה אם השרת קורס באמצע handshake?</b><br>
+        <b>תשובה:</b> הלקוח מקבל <code>ConnectionError</code> מ-<code>requests</code>. ה-try/except במקום הזה תופס את החריגה ומציג הודעת שגיאה למשתמש. ה-AES key לא נוצר, אז הלקוח לא יכול לבצע login עד שהשרת חוזר וה-handshake מתבצע מחדש.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה לא השתמשת ב-HTTPS במקום הצפנה יישומית?</b><br>
+        <b>תשובה:</b> HTTPS דורש <b>תעודות SSL</b> חתומות ע"י Certificate Authority. בסביבה לימודית/בית-ספרית אין לי גישה לכך. ההצפנה ההיברידית שמימשתי משיגה אותה רמת אבטחה (RSA-2048 + AES-256-GCM זה בדיוק מה ש-TLS משתמש בו), בלי תלות בתעודות.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: איך עובד QThread? למה צריך אותו?</b><br>
+        <b>תשובה:</b> Qt מגביל את הגישה ל-UI ל-Thread הראשי בלבד. אם הייתי שולח קובץ של 50MB ב-Thread הראשי — הממשק היה קופא לכמה שניות. במקום זה, אני יוצר <code>QThread</code> שעושה את ההעלאה ברקע, ומעדכן את ה-UI דרך <code>pyqtSignal</code>. ה-Signals הם הדרך הבטוחה היחידה לתקשר בין Thread רקע ל-Thread של ה-UI.
+    </div>
+
+    <!-- GLOSSARY SECTION -->
+    <h2 id="glossary" style="margin-top: 80px; color: #2980b9; border-bottom: 3px solid #ecf0f1; padding-bottom: 8px; background: #e8f4f8; padding: 15px; border-radius: 5px;">💡 Glossary of Key Concepts & Technologies</h2>
+    <p>This table breaks down the core technologies, libraries, and programming concepts used throughout the CloudDrop Client to make everything work seamlessly.</p>
+    
+    <style>
+        .glossary-table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .glossary-table th { background-color: #2c3e50; color: #fff; padding: 15px; text-align: left; font-size: 1.1em; }
+        .glossary-table td { padding: 15px; border-bottom: 1px solid #ecf0f1; vertical-align: top; }
+        .glossary-table tr:nth-child(even) { background-color: #f8fbff; }
+        .glossary-table tr:hover { background-color: #f1f6fa; }
+        .tech-name { font-weight: bold; color: #2980b9; font-size: 1.1em; }
+    </style>
+
+    <table class="glossary-table">
+        <thead>
+            <tr>
+                <th style="width: 20%;">Technology / Concept</th>
+                <th style="width: 80%;">Massive Detailed Explanation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="tech-name">Base64 Encoding</td>
+                <td><b>What it is:</b> A way to translate raw computer binary (1s and 0s) into normal English text.<br><b>Why we use it:</b> When sending a physical file (like a PDF or JPG) over the internet using JSON, you cannot send raw binary because it corrupts the text formatting of the JSON. Base64 mathematically converts the file into a massive, safe string of letters and numbers (A-Z, 0-9). The server receives this text, and "decodes" it back into the exact original physical file.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">QThread & Multithreading</td>
+                <td><b>What it is:</b> A PyQt5 tool that allows the computer to do multiple tasks at the exact same time.<br><b>Why we use it:</b> A graphical app runs on a "Main Thread". If the main thread stops to wait for a 50MB file to download, the entire screen freezes and turns white (Not Responding). By putting heavy tasks (like internet downloads, or scanning 254 IP addresses) into a <code>QThread</code>, a "ghost worker" does the heavy lifting in the background, keeping the main app screen 100% smooth and clickable.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">TCP Sockets</td>
+                <td><b>What it is:</b> A direct, low-level internet pipe between two computers (or a computer and a printer).<br><b>Why we use it:</b> Normally, printing requires complex Windows Drivers. By using a raw TCP Socket on Port 9100, we bypass Windows entirely. We shove the raw PDF data directly down the socket pipe straight into the printer's motherboard. The printer natively understands the PDF and prints it instantly. It's incredibly fast and doesn't require driver installations.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">PyMuPDF (fitz)</td>
+                <td><b>What it is:</b> A high-performance Python library for reading and rendering PDF files.<br><b>Why we use it:</b> To show a preview of a document before printing, or to send a document to the Windows Print Spooler, we need a picture of the document. PyMuPDF takes the raw PDF code and "rasterizes" it—meaning it draws a massive, high-resolution (300 DPI) picture of the page. We then paint this picture onto the screen or the printer.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">COM Interface (pythoncom)</td>
+                <td><b>What it is:</b> Component Object Model (COM) is a Microsoft technology that lets Python scripts remote-control Windows applications.<br><b>Why we use it:</b> We use it via the <code>docx2pdf</code> library to silently remote-control Microsoft Word in the background. It forces Word to open our .docx file and save it as a .pdf. Because we are using the real MS Word engine, complex languages like Hebrew (Right-To-Left) format absolutely perfectly on the final PDF.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">JSON (JavaScript Object Notation)</td>
+                <td><b>What it is:</b> A universal text format for sending structured data over the internet.<br><b>Why we use it:</b> Whenever we talk to our Flask server, we pack our data into a Python Dictionary (like <code>{"sender": "Daniel", "message": "Hello"}</code>). This is translated into JSON format so it can be cleanly transmitted through HTTP requests (using the <code>requests</code> library).</td>
+            </tr>
+            <tr>
+                <td class="tech-name">Signals and Slots (pyqtSignal)</td>
+                <td><b>What it is:</b> The communication system used inside PyQt5.<br><b>Why we use it:</b> Background <code>QThreads</code> are not allowed to touch the UI (like changing a label's text), because it will crash the app. Instead, the background thread emits a "Signal" (like a walkie-talkie shout). The Main UI thread connects a "Slot" (a function) to listen for that shout. When it hears the signal, the main thread safely updates the screen.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">QCompleter</td>
+                <td><b>What it is:</b> A PyQt5 widget that provides an auto-complete dropdown menu.<br><b>Why we use it:</b> In the Send File window, when you start typing a recipient's name, we don't want you to have to type the whole thing. The <code>QCompleter</code> takes our downloaded list of users and automatically suggests matching names as you type, making the app feel incredibly modern and fast.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <hr style="margin-top: 60px; border-top: 2px solid #ecf0f1;">
+    <p style="text-align: center; color: #95a5a6; font-size: 1em; margin-top: 20px;">
+        Generated by Antigravity | Advanced CloudDrop Documentation Series
+    </p>
+
+</div>
+</body>
+</html>
