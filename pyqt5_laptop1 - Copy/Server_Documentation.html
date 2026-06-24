@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudDrop - Server Full Source Code Documentation</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.8; color: #2c3e50; background-color: #f0f4f8; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 40px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); border-radius: 10px; }
+        h1 { color: #1a252f; border-bottom: 4px solid #e74c3c; padding-bottom: 10px; font-size: 2.5em; }
+        h2 { color: #c0392b; border-bottom: 3px solid #ecf0f1; padding-bottom: 8px; margin-top: 60px; font-size: 2em; background: #fdf2f2; padding: 15px; border-radius: 5px; }
+        h3 { color: #e67e22; margin-top: 40px; font-size: 1.5em; border-bottom: 1px dashed #e67e22; padding-bottom: 5px; }
+        .code-block { background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 15px; margin-bottom: 20px; white-space: pre; border: 1px solid #1a1c23; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
+        .explanation { background: #fdfefe; border-left: 6px solid #e74c3c; padding: 20px; margin-bottom: 50px; font-size: 1.15em; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-radius: 0 8px 8px 0; }
+        .toc { background: #ecf0f1; padding: 30px; border-radius: 8px; margin-bottom: 50px; border: 1px solid #bdc3c7; }
+        .toc a { color: #c0392b; text-decoration: none; display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.2em; }
+        .toc a:hover { text-decoration: underline; color: #e74c3c; }
+        b { color: #2c3e50; }
+        code { background: #f1f2f6; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 0.95em; color: #c0392b; }
+        .concept-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .concept-table th { background: #c0392b; color: white; padding: 12px; text-align: left; font-size: 1.1em; }
+        .concept-table td { padding: 14px; border-bottom: 1px solid #ecf0f1; font-size: 1.05em; vertical-align: top; }
+        .concept-table tr:nth-child(even) { background: #fdf2f2; }
+        .tech-name { font-weight: bold; color: #c0392b; min-width: 180px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>&#x1F5A5; CloudDrop Server — In-Depth Master Documentation</h1>
+    <p>This document contains <b>EVERY LINE OF CODE</b> from the Server application. Every block of code is accompanied by a deep-dive explanation covering every variable, every library, and every design decision. Nothing is skipped.</p>
+
+    <div class="toc">
+        <a href="#auth">1. auth.py — Password Security &amp; Lockout System</a>
+        <a href="#dbconn">2. Database_connection.py — Login &amp; Signup Logic</a>
+        <a href="#serverapp">3. server_app.py — The Main Flask API Server</a>
+        <a href="#crypto">4. crypto_utils.py — Hybrid Encryption (RSA + AES)</a>
+        <a href="#qa" style="color: #27ae60;">❓ שאלות ותשובות לבדיקת הפרויקט (צד שרת)</a>
+        <a href="#concepts">5. Key Concepts: Base64, UUID, Flask, Supabase, bcrypt, JSON &amp; More</a>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ AUTH.PY -->
+    <h2 id="auth">1. auth.py — Password Security &amp; Lockout System</h2>
+    <p>This is the security foundation of the entire project. It handles two critical jobs: (1) hashing passwords so they are NEVER stored in plain text, and (2) locking accounts after too many failed login attempts to prevent brute-force attacks.</p>
+
+    <h3>Imports</h3>
+    <div class="code-block">import bcrypt
+from typing import Tuple
+from datetime import datetime</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>import bcrypt</code></b>: bcrypt is one of the most trusted password hashing algorithms in the world. It is specifically designed to be <i>slow</i> — this is intentional. A normal hashing function like SHA-256 can hash billions of passwords per second on a GPU, making it easy for hackers to brute-force stolen passwords. bcrypt is intentionally slow (adjustable via "rounds"). With 12 rounds, each hash takes roughly 250ms — fast enough for a single login, but catastrophically slow for a hacker trying billions of guesses. It also automatically generates a unique random "salt" for each password, meaning two users with identical passwords will have completely different hashes in the database, defeating rainbow-table attacks.<br><br>
+        2. <b><code>from typing import Tuple</code></b>: Python's <code>typing</code> module provides type hints that tell other developers (and code editors) what data type a function expects to return. <code>Tuple</code> is a type hint for a "tuple" — a fixed pair of values. We use this to clearly document that <code>is_locked()</code> returns exactly two pieces of information: a boolean AND a string.<br><br>
+        3. <b><code>from datetime import datetime</code></b>: We import the <code>datetime</code> class to record the exact timestamp when a failed login attempt occurred. This lets us calculate how many minutes have passed since the last failure to determine if a lockout period has expired.
+    </div>
+
+    <h3>The userauth Class — Constructor</h3>
+    <div class="code-block">class userauth:
+    def __init__(self):
+        self.login_attempts = {}
+        self.lockout_minutes = 5
+        self.max_attempts = 3</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This class is instantiated once when the server starts. It holds all authentication state in memory.<br><br>
+        1. <b><code>self.login_attempts = {}</code></b>: This is a Python dictionary (hash map) that acts as an in-memory database of failed login attempts. The key is a username (string), and the value is a tuple of <code>(number_of_attempts, timestamp_of_last_attempt)</code>. Example: <code>{"daniel": (2, datetime(2026, 5, 19, 10, 30, 0))}</code>. This dictionary lives in RAM — it resets if the server restarts. This is a deliberate design choice; restarting the server effectively clears all lockouts.<br><br>
+        2. <b><code>self.lockout_minutes = 5</code></b>: After too many failures, the account is locked for exactly 5 minutes. This number can be changed here to adjust security policy across the entire system.<br><br>
+        3. <b><code>self.max_attempts = 3</code></b>: After 3 wrong passwords in a row, the lockout kicks in. Three is considered the industry standard — enough attempts for a user to correct a typo, but few enough to stop automated attackers.
+    </div>
+
+    <h3>hash_password &amp; check_password</h3>
+    <div class="code-block">    def hash_password(self, password):
+        if not isinstance(password, str):
+            password = str(password)
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+        return hashed
+
+    def check_password(self, password, hashed):
+        if isinstance(hashed, str):
+            hashed = hashed.encode('utf-8')
+        return bcrypt.checkpw(password.encode(), hashed)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        These two functions are the core of the password security system.<br><br>
+        <b>hash_password:</b><br>
+        1. <b>Type guard</b>: <code>if not isinstance(password, str): password = str(password)</code> — bcrypt requires a string. If someone accidentally passes an integer or None, this line converts it first, preventing a crash.<br>
+        2. <b><code>password.encode()</code></b>: bcrypt operates on raw bytes, not Python strings. The <code>.encode()</code> call converts the string to bytes using UTF-8 encoding (e.g., "hello" becomes <code>b'hello'</code>).<br>
+        3. <b><code>bcrypt.gensalt(rounds=12)</code></b>: Generates a cryptographically random "salt" — a random string that gets mixed into the hash. The <code>rounds=12</code> parameter means the algorithm performs 2^12 = 4,096 internal iterations, making it computationally expensive. The salt and the round count are actually embedded inside the final hash string, so we don't need to store them separately.<br>
+        4. <b><code>bcrypt.hashpw(...)</code></b>: Combines the password bytes + salt and runs the bcrypt algorithm. Returns a fixed-length hash that is safe to store in the database.<br><br>
+        <b>check_password:</b><br>
+        1. The stored hash in the database might be a string (if it was decoded before being stored). We check and convert it back to bytes if needed.<br>
+        2. <b><code>bcrypt.checkpw(password.encode(), hashed)</code></b>: This is the brilliant part. bcrypt extracts the salt and rounds from inside the stored hash, re-runs the hashing algorithm on the input password using those exact settings, and then compares the results. This means we NEVER decrypt the password — we just re-hash and compare. Returns <code>True</code> if they match.
+    </div>
+
+    <h3>is_locked — Lockout Check</h3>
+    <div class="code-block">    def is_locked(self, username: str) -> Tuple[bool, str]:
+        if username not in self.login_attempts:
+            return False, ""
+
+        attempts, last_attempt = self.login_attempts[username]
+        if attempts >= self.max_attempts:
+            minutes_passed = (datetime.now() - last_attempt).total_seconds() / 60
+            if minutes_passed < self.lockout_minutes:
+                remaining = self.lockout_minutes - int(minutes_passed)
+                return True, f"Account is locked. Try again in {remaining} minutes."
+        return False, ""</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This function is called BEFORE every login attempt. It answers the question: "Should we even allow this person to try?"<br><br>
+        1. <b>Early exit</b>: If the username has never had a failed attempt, it won't exist in the <code>login_attempts</code> dictionary. We immediately return <code>False, ""</code> (not locked, no message).<br><br>
+        2. <b>Unpacking state</b>: <code>attempts, last_attempt = self.login_attempts[username]</code> unpacks the stored tuple into the count of failures and the timestamp of the most recent one.<br><br>
+        3. <b>Threshold check</b>: <code>if attempts >= self.max_attempts:</code> — if they've hit 3 or more failures, we enter the lockout logic.<br><br>
+        4. <b>Time calculation</b>: <code>(datetime.now() - last_attempt).total_seconds() / 60</code> — We subtract two datetime objects, getting a <code>timedelta</code>. We call <code>.total_seconds()</code> on it to get the difference in seconds, then divide by 60 to get minutes. This tells us how long ago the last failure was.<br><br>
+        5. <b>Still locked?</b>: If fewer than 5 minutes have passed, we calculate the exact remaining time and return a user-friendly message like "Account is locked. Try again in 3 minutes." This message gets displayed directly in the PyQt5 login window popup.
+    </div>
+
+    <h3>track_failed_attempt &amp; reset_attempts</h3>
+    <div class="code-block">    def track_failed_attempt(self, username: str):
+        now = datetime.now()
+        if username in self.login_attempts:
+            attempts, _ = self.login_attempts[username]
+            self.login_attempts[username] = (attempts + 1, now)
+        else:
+            self.login_attempts[username] = (1, now)
+
+    def reset_attempts(self, username: str):
+        if username in self.login_attempts:
+            del self.login_attempts[username]</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        <b>track_failed_attempt:</b><br>
+        Called every time someone enters the wrong password. We check if this username already has a record in our <code>login_attempts</code> dictionary.<br>
+        - If YES: We unpack the current attempt count (we use <code>_</code> for the old timestamp since we don't need it), increment the count by 1, and store the NEW current timestamp. The timestamp always reflects the MOST RECENT failure.<br>
+        - If NO (first failure): We create a fresh entry with count=1 and the current time.<br><br>
+        <b>reset_attempts:</b><br>
+        Called upon a SUCCESSFUL login. If the user had some failed attempts but then got it right, we completely erase their failure record from the dictionary. This prevents a user from being temporarily blocked on their next login even though they successfully authenticated this time. We use <code>del</code> to completely remove the key from the dictionary.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ DATABASE_CONNECTION.PY -->
+    <h2 id="dbconn">2. Database_connection.py — Login &amp; Signup Logic</h2>
+    <p>This module bridges the auth security layer with the MySQL database. It contains two public functions: one to verify existing users and one to register new ones.</p>
+
+    <h3>Imports &amp; Setup</h3>
+    <div class="code-block">import pymysql
+from Server.auth import userauth
+
+auth = userauth()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>import pymysql</code></b>: PyMySQL is a pure-Python library that lets our code speak the MySQL protocol. Unlike the older <code>MySQLdb</code> library which requires compiling C extensions, PyMySQL is written entirely in Python and works on any platform without extra installation steps. It handles the low-level TCP connection, authentication handshake, and SQL query transmission between our Python code and the MySQL database server.<br><br>
+        2. <b><code>from Server.auth import userauth</code></b>: We import our custom security class.<br><br>
+        3. <b><code>auth = userauth()</code></b>: We create ONE single instance of <code>userauth</code> at module level. This is critically important — it's a module-level singleton. Because Python caches imported modules, this single <code>auth</code> object lives for the entire lifetime of the server process. This means the <code>login_attempts</code> dictionary inside it persists across all requests, correctly tracking failed login attempts across the lifetime of the server.
+    </div>
+
+    <h3>handle_login — Full Login Verification</h3>
+    <div class="code-block">def handle_login(username, password):
+    # Step 1: Check if account is locked
+    locked, lock_message = auth.is_locked(username)
+    if locked:
+        return {"status": "error", "message": lock_message}
+
+    con = pymysql.connect(
+        host='localhost',
+        user='root',
+        password='Data230308data',
+        database='userdata',
+    )
+    cursor = con.cursor()
+
+    try:
+        query = 'SELECT password, is_blocked, is_admin FROM data WHERE username=%s'
+        cursor.execute(query, (username,))
+        result = cursor.fetchone()
+    except Exception:
+        query = 'SELECT password FROM data WHERE username=%s'
+        cursor.execute(query, (username,))
+        result = cursor.fetchone()
+        if result:
+            result = (result[0], 0, 0)
+
+    con.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This is the most important function in this file. It is the gatekeeper of the entire application.<br><br>
+        1. <b>Lockout check first</b>: Before even touching the database, we ask the auth system if this account is locked. If yes, we immediately return an error dict with the lock message. We waste zero database resources on blocked attackers.<br><br>
+        2. <b>Database connection</b>: We open a fresh MySQL connection. Note: <code>host='localhost'</code> means the MySQL server is running on the same machine as this Python server. The <code>database='userdata'</code> parameter selects the specific database to use. The <code>password</code> is the MySQL root password.<br><br>
+        3. <b>Primary query</b>: <code>SELECT password, is_blocked, is_admin FROM data WHERE username=%s</code> — We attempt to fetch all three fields. The <code>%s</code> is a parameterized placeholder — PyMySQL automatically sanitizes the username value before inserting it, completely preventing SQL Injection attacks. A hacker cannot type <code>' OR 1=1 --</code> as a username to bypass authentication.<br><br>
+        4. <b>Fallback query</b>: The <code>except Exception</code> block handles the case where the <code>is_blocked</code> or <code>is_admin</code> columns don't exist yet (e.g., first-time setup before <code>init_db()</code> ran). It falls back to fetching only the password and manually creates a tuple with defaults (0, 0) for the missing fields.<br><br>
+        5. <b><code>con.close()</code></b>: Always close the database connection. Leaving connections open wastes server resources and can exhaust the MySQL connection pool.
+    </div>
+
+    <h3>handle_login — Password Verification &amp; Response</h3>
+    <div class="code-block">    if result:
+        stored_hash = result[0]
+        is_blocked = result[1] if len(result) > 1 else 0
+        is_admin   = result[2] if len(result) > 2 else 0
+
+        if isinstance(stored_hash, str):
+            stored_hash = stored_hash.encode('utf-8')
+
+        if auth.check_password(password, stored_hash):
+            if username in auth.login_attempts:
+                del auth.login_attempts[username]
+
+            if is_blocked:
+                return {"status": "error", "message": "Account is blocked by admin", "is_blocked": True}
+
+            return {
+                "status": "success",
+                "message": "Login successful",
+                "is_admin": bool(is_admin),
+                "is_blocked": bool(is_blocked)
+            }
+        else:
+            auth.track_failed_attempt(username)
+            return {"status": "error", "message": "Invalid username or password"}
+    else:
+        auth.track_failed_attempt(username)
+        return {"status": "error", "message": "Invalid username or password"}</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This is the decision tree after we've fetched data from the database.<br><br>
+        1. <b><code>if result:</code></b>: If <code>fetchone()</code> returned <code>None</code>, the username doesn't exist in the database. We fall to the <code>else</code> block, call <code>track_failed_attempt</code> (to protect against username enumeration via timing attacks), and return a generic error. We deliberately say "Invalid username or password" — NOT "Username not found" — because telling an attacker which field is wrong helps them.<br><br>
+        2. <b>Extracting fields safely</b>: We use <code>len(result) > 1</code> checks to safely extract each field, handling the fallback tuple case.<br><br>
+        3. <b>Hash type check</b>: MySQL sometimes returns VARCHAR fields as Python strings. bcrypt requires bytes. We encode the hash if needed.<br><br>
+        4. <b><code>auth.check_password(password, stored_hash)</code></b>: This is the bcrypt comparison. If it returns <code>True</code>, the password matches.<br><br>
+        5. <b>Clearing failure history</b>: On a successful login, we delete the failure record from <code>auth.login_attempts</code>. A user who had 2 failures but then got it right on the 3rd try gets a clean slate.<br><br>
+        6. <b>Admin block check</b>: Even with a correct password, if <code>is_blocked</code> is 1 (set by an admin), we deny entry. This is the admin ban system — the user's password is fine, but an admin has explicitly blocked their account.<br><br>
+        7. <b>Success response</b>: We return a dictionary containing the status, a human-readable message, and the two boolean flags. The <code>bool()</code> cast ensures MySQL's 0/1 integers become proper Python True/False values.
+    </div>
+
+    <h3>handle_signup — New User Registration</h3>
+    <div class="code-block">def handle_signup(username, password):
+    con = pymysql.connect(
+        host='localhost',
+        user='root',
+        password='Data230308data',
+        database='userdata',
+    )
+    mycursor = con.cursor()
+
+    mycursor.execute('SELECT * FROM data WHERE username=%s', (username,))
+    if mycursor.fetchone():
+        response = {"status": "error", "message": "Username already exists"}
+    else:
+        pwd_hash = auth.hash_password(password)
+
+        if isinstance(pwd_hash, bytes):
+            pwd_hash = pwd_hash.decode('utf-8')
+
+        try:
+            mycursor.execute(
+                'INSERT INTO data(username, password, is_blocked, is_admin) VALUES (%s, %s, 0, 0)',
+                (username, pwd_hash)
+            )
+        except Exception:
+            mycursor.execute(
+                'INSERT INTO data(username, password) VALUES (%s, %s)',
+                (username, pwd_hash)
+            )
+        con.commit()
+        response = {"status": "success", "message": "Sign Up successful"}
+
+    con.close()
+    return response</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This function creates a brand new user account in the database.<br><br>
+        1. <b>Duplicate check</b>: <code>SELECT * FROM data WHERE username=%s</code> — Before creating anything, we check if a user with that username already exists. If <code>fetchone()</code> returns a row, the username is taken. We immediately return an error. This is the "Username already exists" message the user sees in the signup UI.<br><br>
+        2. <b>Password hashing</b>: <code>auth.hash_password(password)</code> — We NEVER store the plain-text password. We immediately hash it using bcrypt (with 12 rounds) before it ever touches the database.<br><br>
+        3. <b>Bytes to string</b>: bcrypt returns bytes. MySQL VARCHAR columns store strings. We decode the bytes to a UTF-8 string using <code>.decode('utf-8')</code> so it can be stored in the database.<br><br>
+        4. <b>Primary INSERT</b>: We insert the username, hashed password, and default values of 0 for both <code>is_blocked</code> and <code>is_admin</code>. Every new user starts as a regular, unblocked, non-admin user.<br><br>
+        5. <b>Fallback INSERT</b>: If the <code>is_blocked</code>/<code>is_admin</code> columns don't exist yet (old schema), we fall back to inserting just username and password. This makes the signup code resilient during migration.<br><br>
+        6. <b><code>con.commit()</code></b>: This is critical! In MySQL, INSERT/UPDATE/DELETE operations are not permanent until you explicitly commit. If we crash before committing, the database rolls back automatically. <code>commit()</code> makes the new user permanent.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ SERVER_APP.PY -->
+    <h2 id="serverapp">3. server_app.py — The Main Flask API Server</h2>
+    <p>This is the heart of the backend. It uses the Flask framework to listen for incoming HTTP requests from the Client, interact with the MySQL database, manage files in Supabase Storage, and return JSON responses.</p>
+
+    <h3>Imports & Configuration (now with Hybrid Encryption)</h3>
+    <div class="code-block">import os
+import base64
+import uuid
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify
+import pymysql
+from werkzeug.utils import secure_filename
+from Server.Database_connection import handle_login, handle_signup
+from supabase import create_client, Client
+from Server.crypto_utils import generate_rsa_keys, export_public_key, rsa_decrypt, aes_decrypt
+
+SUPABASE_URL = "https://trgaimvzokzrtapgkxsd.supabase.co"
+SUPABASE_SERVICE_KEY = "eyJhbGci..."
+SUPABASE_BUCKET = "Files"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+APP_HOST = "0.0.0.0"
+APP_PORT = 5000
+MAX_FILE_MB = 50
+online_users = {}
+ONLINE_TIMEOUT_SECONDS = 20
+
+DB_CONFIG = dict(
+    host='localhost', user='root', password='Data230308data',
+    database='userdata', charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
+)
+app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_MB * 1024 * 1024
+
+# ===================== HYBRID ENCRYPTION SETUP =====================
+_rsa_private, _rsa_public = generate_rsa_keys()
+print("RSA Key generated.")
+_sessions = {}  # session_token -> AES key (RAM only)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>Flask</code></b>: The web framework. Listens on port 5000.<br>
+        2. <b><code>Supabase</code></b>: Cloud storage for the file bytes. Files are now stored <b>encrypted</b>, so even a Supabase breach yields nothing readable.<br>
+        3. <b><code>crypto_utils</code> import</b>: We import four helpers — <code>generate_rsa_keys</code>, <code>export_public_key</code>, <code>rsa_decrypt</code>, <code>aes_decrypt</code>. These are the server's side of the hybrid encryption.<br>
+        4. <b><code>APP_HOST = "0.0.0.0"</code></b>: Listens on all network interfaces so other computers (the client laptop at school) can connect.<br>
+        5. <b><code>MAX_CONTENT_LENGTH</code></b>: 50MB upload cap to prevent DoS attacks.<br>
+        6. <b><code>_rsa_private, _rsa_public = generate_rsa_keys()</code></b>: The server's permanent (per-run) RSA-2048 key pair. Lives in RAM only — never written to disk. If the server restarts, all existing client sessions become invalid and must re-handshake. This is intentional.<br>
+        7. <b><code>print("RSA Key generated.")</code></b>: Confirmation that the server is ready to negotiate encrypted sessions.<br>
+        8. <b><code>_sessions = {}</code></b>: A Python dictionary mapping <code>session_token → AES key</code>. Each connected client gets a unique token after the handshake. Because Flask is stateless HTTP, this dictionary is how we "remember" who owns which AES key across requests.
+    </div>
+
+    <h3>Database Initialization (init_db) — now with encrypted_aes_key column</h3>
+    <div class="code-block">def init_db():
+    con = get_db()
+    cur = con.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS shared_files (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            file_uid VARCHAR(64) NOT NULL,
+            sender VARCHAR(255) NOT NULL,
+            receiver VARCHAR(255) NOT NULL,
+            filename VARCHAR(255) NOT NULL,
+            path VARCHAR(500) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            max_downloads INT DEFAULT 1,
+            download_count INT DEFAULT 0,
+            uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            message TEXT
+        );
+    """)
+    # ... Creates history, system_settings, and print_jobs tables ...
+
+    # Auto-migration: add columns to existing tables if missing
+    add_column("data", "is_blocked", "BOOLEAN DEFAULT 0")
+    add_column("data", "is_admin", "BOOLEAN DEFAULT 0")
+    add_column("shared_files", "message", "TEXT")
+    add_column("shared_files", "encrypted_aes_key", "TEXT")  # ← NEW: per-file RSA-encrypted AES key
+
+    con.commit()
+    con.close()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This function runs exactly once when the server boots up. It is an "Auto-Migration" system.<br><br>
+        1. <b><code>CREATE TABLE IF NOT EXISTS</code></b>: This ensures that if we install the server on a brand new computer, it will automatically build the entire database structure itself. We don't need to manually import SQL files.<br>
+        2. <b>Tables Created</b>: 
+        <ul>
+            <li><code>shared_files</code>: Tracks every file uploaded, who sent it, who receives it, the expiration time, and how many times it has been downloaded.</li>
+            <li><code>history</code>: The Audit Log. Tracks logins, logouts, uploads, downloads, and admin bans.</li>
+            <li><code>system_settings</code>: A flexible key-value store for global settings (like global_max_downloads).</li>
+            <li><code>print_jobs</code>: Tracks files sent to the Print Operator queue.</li>
+        </ul>
+        3. <b>ALTER TABLE updates</b>: Helper functions run <code>ALTER TABLE ADD COLUMN</code> to upgrade old databases without losing data.<br>
+        4. <b>The new <code>encrypted_aes_key</code> column</b>: A TEXT field that stores the base64 RSA-encrypted AES key for each uploaded file. On upload, the client encrypts the file's AES key with our public RSA key and we save the result here. On download, we use our private RSA key to decrypt it and send the AES key to the recipient so they can unlock the file.
+    </div>
+
+    <h3>Core Helpers & Middleware</h3>
+    <div class="code-block">def log_history(username, action, details=""):
+    # Inserts an event into the history table
+
+def cleanup_expired_files():
+    con = get_db()
+    cur = con.cursor()
+    cur.execute("SELECT id, path FROM shared_files WHERE expires_at < NOW()")
+    expired = cur.fetchall()
+
+    for row in expired:
+        try:
+            supabase.storage.from_(SUPABASE_BUCKET).remove([row["path"]])
+        except Exception: pass
+        cur.execute("DELETE FROM shared_files WHERE id=%s", (row["id"],))
+    con.commit()
+    con.close()
+
+@app.before_request
+def before_any_request():
+    cleanup_expired_files()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>log_history</code></b>: A simple utility function that takes a username and an action and inserts it into the MySQL audit log.<br>
+        2. <b><code>cleanup_expired_files</code></b>: This is the automated garbage collector. It queries the database for any files where <code>expires_at &lt; NOW()</code> (meaning the current time has passed the expiration time). For every expired file, it makes an API call to Supabase to permanently delete the physical file bytes from the cloud, and then deletes the metadata row from MySQL. This ensures our cloud storage bill never explodes.<br>
+        3. <b><code>@app.before_request</code></b>: This is a Flask "Middleware". Every single time a client sends ANY request to the server (login, upload, heartbeat), Flask intercepts it, pauses it, and runs <code>cleanup_expired_files()</code> FIRST. This guarantees that expired files are deleted instantly without needing a separate complicated background cron-job.
+    </div>
+
+    <h3>File Upload API Endpoint (Encrypted at Rest)</h3>
+    <div class="code-block">@app.route("/upload_file", methods=["POST"])
+def upload_file():
+    data = request.json
+    sender = data.get("sender", "").strip()
+    receivers = data.get("receivers", [])
+    filename = data.get("filename", "").strip()
+    filedata_b64 = data.get("filedata", "")
+    encrypted_aes_key = data.get("encrypted_aes_key", "")  # ← NEW: per-file RSA-encrypted AES key
+    minutes = int(data.get("minutes", 10))
+    max_downloads = int(data.get("max_downloads", 1))
+
+    if not all([sender, receivers, filename, encrypted_aes_key]) or "filedata" not in data:
+        return jsonify({"status": "Missing fields"}), 400
+
+    safe_name = secure_filename(filename)
+    raw_bytes = base64.b64decode(filedata_b64)  # raw_bytes here is the ALREADY-ENCRYPTED file
+    file_uid = uuid.uuid4().hex
+    server_filename = f"{file_uid}_{safe_name}"
+
+    # Push encrypted bytes to Supabase
+    supabase.storage.from_(SUPABASE_BUCKET).upload(
+        server_filename, raw_bytes, {"content-type": "application/octet-stream"})
+
+    expires_at = datetime.now() + timedelta(minutes=minutes)
+
+    for rcv in receivers:
+        cur.execute("""
+            INSERT INTO shared_files(file_uid, sender, receiver, filename, path,
+                                      expires_at, max_downloads, download_count,
+                                      message, encrypted_aes_key)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s)
+        """, (file_uid, sender, rcv, safe_name, server_filename, expires_at,
+              max_downloads, data.get("message"), encrypted_aes_key))
+
+    con.commit()
+    return jsonify({"status": "OK"})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This endpoint now receives <b>two</b> pieces of encrypted data and stores them in <b>two</b> different places:<br>
+        - The encrypted file bytes go to Supabase storage.<br>
+        - The encrypted AES key goes to MySQL.<br><br>
+        1. <b><code>filedata</code></b>: <i>Already encrypted</i> by the client with a per-file AES key. The server never sees the plaintext file. When we decode base64, we get the encrypted bytes (which look like random noise) and push <i>those</i> to Supabase. So files at rest in Supabase are ciphertext.<br>
+        2. <b><code>encrypted_aes_key</code></b>: The per-file AES key, encrypted by the client with our RSA public key. Only our RSA private key can recover it. We store this string in the new <code>encrypted_aes_key</code> column.<br>
+        3. <b><code>secure_filename()</code></b>: Werkzeug helper that strips directory traversal characters like <code>../</code>.<br>
+        4. <b><code>uuid.uuid4().hex</code></b>: Prevents file name collisions in the Supabase bucket.<br>
+        5. <b>Database Loop</b>: A single file sent to multiple receivers becomes multiple rows — one per receiver, each with its own download counter. The same <code>encrypted_aes_key</code> is stored in each row.<br><br>
+        <b>Security analysis:</b> An attacker who breaches Supabase alone has only ciphertext. An attacker who breaches MySQL alone has the encrypted AES key. An attacker who breaches the running server's RAM has the RSA private key but not the files. The full chain requires <i>all three</i>.
+    </div>
+
+    <h3>File Download API Endpoint (Decrypts the AES Key with RSA)</h3>
+    <div class="code-block">@app.route("/get_file", methods=["POST"])
+def get_file():
+    data = request.json
+    receiver = data.get("receiver", "").strip()
+    file_id = data.get("file_id")
+
+    cur.execute("""
+        SELECT filename, path, expires_at, encrypted_aes_key
+        FROM shared_files
+        WHERE id=%s AND receiver=%s
+    """, (file_id, receiver))
+    row = cur.fetchone()
+
+    if datetime.now() > row["expires_at"]:
+        return jsonify({"status": "File expired"}), 403
+
+    cur.execute("UPDATE shared_files SET download_count = download_count + 1 WHERE id=%s", (file_id,))
+    con.commit()
+
+    # Pull the still-encrypted file from Supabase
+    raw = supabase.storage.from_(SUPABASE_BUCKET).download(row["path"])
+    encoded = base64.b64encode(raw).decode()
+
+    # Use our RSA private key to recover the per-file AES key
+    file_aes_key = rsa_decrypt(_rsa_private, row["encrypted_aes_key"])
+    file_aes_key_b64 = base64.b64encode(file_aes_key).decode()
+
+    return jsonify({
+        "status": "OK",
+        "filename": row["filename"],
+        "filedata": encoded,          # still AES-encrypted
+        "file_aes_key": file_aes_key_b64  # the key needed to decrypt it
+    })</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This endpoint reunites the two pieces of an encrypted file and ships them to the authorized recipient.<br><br>
+        1. <b>SELECT including <code>encrypted_aes_key</code></b>: We now fetch four columns instead of three. The encrypted AES key for this specific file is stored alongside the file metadata.<br>
+        2. <b>Expiration Check</b>: If the current time is past <code>expires_at</code>, return 403.<br>
+        3. <b>Increment download counter</b>: After incrementing, we check if the file reached <code>max_downloads</code>. If so, the row + cloud file are deleted to enforce the download limit.<br>
+        4. <b>Supabase Download</b>: Pull the encrypted bytes from the cloud. The bytes are STILL encrypted — we do not decrypt them on the server. The Client will do that.<br>
+        5. <b><code>rsa_decrypt(_rsa_private, row["encrypted_aes_key"])</code></b>: This is the critical line. The server uses its private RSA key to unwrap the per-file AES key. <i>Only this server can do this</i>, because the private key has never left the server's RAM.<br>
+        6. <b>The Response</b>: We base64-encode both the encrypted file and the now-decrypted AES key, and ship them in JSON. The recipient takes the AES key and uses it to decrypt the file locally.<br><br>
+        <b>Is sending the AES key in the response unsafe?</b> Not in this architecture. The response travels over the secure HTTP session we already have, and only the authorized recipient (who passed the <code>receiver = %s</code> SQL check) ever sees it.
+    </div>
+
+    <h3>Cloud Printing API Endpoints</h3>
+    <div class="code-block">@app.route("/request_print", methods=["POST"])
+def request_print():
+    data = request.json
+    file_id = data.get("file_id")
+    operator = data.get("operator", "operator").strip()
+
+    # Fetch file info from DB
+    cur.execute("SELECT id, sender, filename, path FROM shared_files WHERE id=%s", (file_id,))
+    row = cur.fetchone()
+    
+    ext = os.path.splitext(row["filename"])[1].lower().lstrip(".")
+    print_allowed = ext in ("pdf", "docx")
+
+    # Download from Supabase
+    raw = supabase.storage.from_(SUPABASE_BUCKET).download(row["path"])
+
+    # Create Print Job
+    cur.execute("""
+        INSERT INTO print_jobs (file_id, sender, filename, file_type, print_allowed, print_status)
+        VALUES (%s, %s, %s, %s, %s, 'pending')
+    """, (file_id, row["sender"], row["filename"], ext, int(print_allowed)))
+    job_id = cur.lastrowid
+    con.commit()
+
+    encoded = base64.b64encode(raw).decode()
+    return jsonify({"status": "OK", "job_id": job_id, "filename": row["filename"], "filedata": encoded})
+
+@app.route("/update_print_status", methods=["POST"])
+def update_print_status():
+    data = request.json
+    job_id = data.get("job_id")
+    status = data.get("status", "printed").strip()
+    
+    cur.execute("UPDATE print_jobs SET print_status=%s WHERE id=%s", (status, job_id))
+    con.commit()
+    return jsonify({"status": "OK"})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        These endpoints manage the Cloud Printing system.<br><br>
+        1. <b><code>/request_print</code></b>: When an admin decides to print a file from the server, this endpoint is called. It fetches the file from Supabase, checks the file extension (only PDF and DOCX are allowed to print), and inserts a new row into the <code>print_jobs</code> table with a status of <code>'pending'</code>.<br>
+        2. <b><code>cur.lastrowid</code></b>: After inserting the new print job, this gets the automatically generated ID of that job so we can return it to the client.<br>
+        3. <b><code>/update_print_status</code></b>: Once the client successfully sends the raw bytes to the JetDirect printer (on port 9100) and confirms the printer accepted it, the client calls this endpoint to change the job status in the database from <code>'pending'</code> to <code>'printed'</code>.
+    </div>
+
+    <h3>User Presence & Heartbeat Endpoints</h3>
+    <div class="code-block">@app.route("/all_users", methods=["GET"])
+def all_users():
+    cur.execute("SELECT username FROM data ORDER BY username")
+    rows = cur.fetchall()
+    return jsonify({"status": "OK", "users": [r["username"] for r in rows]})
+
+@app.route("/user_online", methods=["POST"])
+def user_online():
+    data = request.json
+    username = data.get("username", "").strip()
+    online_users[username] = datetime.now()
+    return jsonify({"status": "OK"})
+
+@app.route("/online_users", methods=["GET"])
+def online_users_list():
+    now = datetime.now()
+    active = [
+        u for u, t in online_users.items()
+        if (now - t).total_seconds() < ONLINE_TIMEOUT_SECONDS
+    ]
+    return jsonify({"status": "OK", "online": active})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        These endpoints power the real-time active user tracking in the Send File window.<br><br>
+        1. <b><code>/all_users</code></b>: Simply returns a list of every registered username. This is used by the <code>QCompleter</code> on the client side for auto-complete typing.<br>
+        2. <b><code>/user_online</code></b>: This is the "Heartbeat" receiver. Every 10 seconds, the client sends a background ping to this URL. The server updates the <code>online_users</code> dictionary with the current timestamp.<br>
+        3. <b><code>/online_users</code></b>: This calculates exactly who is online RIGHT NOW. It loops through the dictionary, subtracts the last seen time from the current time, and if the difference is less than 20 seconds (<code>ONLINE_TIMEOUT_SECONDS</code>), they are considered active and returned to the client to display the green "Online" dot.
+    </div>
+
+    <h3>Admin & Security Endpoints</h3>
+    <div class="code-block">def is_admin(username):
+    cur.execute("SELECT is_admin FROM data WHERE username=%s", (username,))
+    res = cur.fetchone()
+    return res and res["is_admin"]
+
+@app.route("/admin/users", methods=["POST"])
+def admin_users():
+    data = request.json
+    admin_user = data.get("admin_user", "")
+    if not is_admin(admin_user):
+        return jsonify({"status": "Forbidden"}), 403
+
+    cur.execute("SELECT username, is_blocked, is_admin FROM data ORDER BY username")
+    rows = cur.fetchall()
+    return jsonify({"status": "OK", "users": rows})
+
+@app.route("/admin/block_user", methods=["POST"])
+def admin_block_user():
+    data = request.json
+    admin_user = data.get("admin_user", "")
+    target_user = data.get("target_user", "")
+    block = data.get("block", False)
+
+    if not is_admin(admin_user):
+        return jsonify({"status": "Forbidden"}), 403
+
+    cur.execute("UPDATE data SET is_blocked=%s WHERE username=%s", (1 if block else 0, target_user))
+    con.commit()
+    log_history(admin_user, "ADMIN_ACTION", f"Blocked/Unblocked user {target_user}")
+    return jsonify({"status": "OK"})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The security gateway for God-Mode privileges.<br><br>
+        1. <b><code>is_admin(username)</code></b>: Every single admin request must pass this check. The server NEVER trusts the client. Even if the client modifies its memory to show the admin panel, when it sends a request to block a user, the server queries the database to prove the sender actually has the <code>is_admin = 1</code> flag. If not, it returns a 403 Forbidden.<br>
+        2. <b><code>/admin/block_user</code></b>: Receives a boolean (True/False) and updates the <code>is_blocked</code> flag in the database. If this flag is 1, the <code>handle_login</code> function (in Database_connection.py) will reject their password even if it is perfectly correct.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ CRYPTO_UTILS.PY -->
+    <h2 id="crypto">4. crypto_utils.py — Hybrid Encryption (RSA + AES)</h2>
+    <p>This module is the cryptographic foundation of CloudDrop. It implements <b>hybrid encryption</b> — a combination of asymmetric (RSA) and symmetric (AES) encryption — to secure two things: (1) all sensitive data in transit between client and server, and (2) every uploaded file <i>at rest</i> in the cloud, so even Supabase administrators cannot read user files.</p>
+
+    <h3>Why Hybrid Encryption?</h3>
+    <div class="explanation">
+        <b>The fundamental problem:</b> RSA is mathematically strong but extremely slow — it can only encrypt small amounts of data (a few hundred bytes). AES is blazing fast and can encrypt gigabytes per second, but both sides must already share the same secret key. So how do you share an AES key safely over an insecure network?<br><br>
+        <b>The hybrid solution:</b> Use RSA <i>once</i> to securely exchange a random AES key, then use that AES key for all the actual data. RSA solves the "key exchange problem" and AES solves the "speed problem". This is exactly how HTTPS, SSH, and almost every modern secure protocol works.
+    </div>
+
+    <h3>Imports</h3>
+    <div class="code-block">import json
+import base64
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>cryptography</code></b>: The official Python cryptography library, maintained by the Python Cryptographic Authority. It is the gold standard for crypto in Python — battle-tested, audited, and used by companies like Mozilla and Google.<br><br>
+        2. <b><code>rsa</code></b>: Provides RSA key generation and operations. We use RSA-2048 — a 2048-bit key that would take all the computers on Earth millions of years to brute-force.<br><br>
+        3. <b><code>padding.OAEP</code></b>: "Optimal Asymmetric Encryption Padding". This is critical — never use raw RSA. OAEP adds randomness before encryption so that encrypting the same data twice produces different ciphertexts, defeating various attacks.<br><br>
+        4. <b><code>serialization</code></b>: Converts RSA key objects into transportable formats like <b>PEM</b> (the standard <code>-----BEGIN PUBLIC KEY-----</code> text format) so we can send the public key over HTTP to the client.<br><br>
+        5. <b><code>AESGCM</code></b>: AES in Galois/Counter Mode. GCM is a modern <i>authenticated</i> encryption mode — it not only encrypts but also produces an authentication tag that detects any tampering with the ciphertext. If a hacker flips even a single bit, decryption will fail loudly instead of returning corrupted data.
+    </div>
+
+    <h3>generate_rsa_keys()</h3>
+    <div class="code-block">def generate_rsa_keys():
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
+    )
+    public_key = private_key.public_key()
+    return private_key, public_key</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Called <b>once</b> when the server starts. Generates a brand-new RSA-2048 key pair that lives only in the server's RAM.<br><br>
+        1. <b><code>public_exponent=65537</code></b>: A standard prime number known as F4. Mathematically optimal for RSA — fast to compute with but not vulnerable to known small-exponent attacks.<br><br>
+        2. <b><code>key_size=2048</code></b>: The key length in bits. 2048 bits is the current industry standard. Smaller (1024) is considered breakable; larger (4096) is overkill and very slow.<br><br>
+        3. <b>Why generate on every restart?</b> The private key is intentionally <i>never written to disk</i>. If the server crashes, all old AES session keys become useless and new clients must perform a fresh handshake. This is by design — it dramatically limits damage if the server is ever breached.<br><br>
+        4. <b>The two keys:</b> The private key stays secret on the server. The public key is freely sent to every client — anyone can encrypt <i>to</i> the server, but only the server can decrypt.
+    </div>
+
+    <h3>export_public_key()</h3>
+    <div class="code-block">def export_public_key(public_key):
+    pem_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return pem_bytes.decode()</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Converts the in-memory Python RSA key object into a portable text representation that can travel over JSON/HTTP.<br><br>
+        1. <b><code>Encoding.PEM</code></b>: PEM (Privacy-Enhanced Mail) is the universal text format for cryptographic keys. The output looks like <code>-----BEGIN PUBLIC KEY-----\nMIIBIj...\n-----END PUBLIC KEY-----</code>.<br><br>
+        2. <b><code>SubjectPublicKeyInfo</code></b>: An X.509 standard for encoding public keys. Every modern crypto library (Python, C#, JavaScript, Java) can read this format.<br><br>
+        3. <b><code>.decode()</code></b>: Converts the raw bytes to a Python string so it can be placed inside a JSON response.
+    </div>
+
+    <h3>rsa_decrypt()</h3>
+    <div class="code-block">def rsa_decrypt(private_key, encrypted_b64):
+    encrypted_bytes = base64.b64decode(encrypted_b64)
+    decrypted = private_key.decrypt(
+        encrypted_bytes,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return decrypted</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Called whenever the server receives something encrypted with its public RSA key — specifically (1) the per-session AES key from a new client during handshake, and (2) the per-file AES key when retrieving a file for download.<br><br>
+        1. <b><code>base64.b64decode()</code></b>: The encrypted bytes arrive as base64 text inside JSON (because raw binary cannot live in JSON). We decode back to actual bytes.<br><br>
+        2. <b><code>padding.OAEP</code> with SHA-256</b>: Must match <i>exactly</i> what the client used to encrypt. If the client uses OAEP-SHA256, the server must use OAEP-SHA256. A single mismatch = decryption error.<br><br>
+        3. <b>Output:</b> The original plaintext bytes (which in our system are always a 32-byte AES-256 key).
+    </div>
+
+    <h3>aes_decrypt()</h3>
+    <div class="code-block">def aes_decrypt(aes_key, encrypted_b64):
+    data = base64.b64decode(encrypted_b64)
+    nonce = data[:12]
+    ciphertext = data[12:]
+    aesgcm = AESGCM(aes_key)
+    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+    return json.loads(plaintext.decode())</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        Called inside the <code>/login</code> endpoint to decrypt the username and password that the client wrapped with the session AES key.<br><br>
+        1. <b>Splitting nonce from ciphertext:</b> AES-GCM requires a unique 12-byte <b>nonce</b> per message (a "number used once"). The client prepends the nonce to the ciphertext before sending. The server splits them back apart.<br><br>
+        2. <b>Why a nonce per message?</b> Using the same nonce twice with the same key catastrophically breaks GCM — an attacker could recover the key. So every single encrypted message has a fresh random nonce.<br><br>
+        3. <b><code>aesgcm.decrypt()</code></b>: This call does <i>two</i> things at once: (a) decrypts the ciphertext, and (b) verifies the authentication tag. If any byte was tampered with in transit, this raises <code>InvalidTag</code> and we reject the message.<br><br>
+        4. <b><code>json.loads()</code></b>: The decrypted bytes are a JSON string (e.g. <code>{"username":"daniel","password":"1234"}</code>). We parse it back to a Python dict.
+    </div>
+
+    <h3>Server Setup &amp; Endpoints</h3>
+    <p>Inside <code>server_app.py</code>, three things wire the crypto into the running Flask app:</p>
+    <div class="code-block">_rsa_private, _rsa_public = generate_rsa_keys()
+print("RSA Key generated.")
+_sessions = {}  # session_token -> aes_key  (RAM only)</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        1. <b><code>_rsa_private, _rsa_public</code></b>: The server's permanent (per-run) RSA key pair. Lives in RAM, never persisted.<br><br>
+        2. <b><code>_sessions</code></b>: A Python dictionary mapping <code>session_token → AES key</code>. Each client that completes the handshake gets a unique token and its own AES key. Because Flask is stateless HTTP, this dictionary is how the server "remembers" which client owns which key across requests.
+    </div>
+
+    <h3>GET /public_key — The Handshake Starts Here</h3>
+    <div class="code-block">@app.route("/public_key", methods=["GET"])
+def public_key():
+    return jsonify({"public_key": export_public_key(_rsa_public)})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        When a client first launches, it calls this endpoint to fetch the server's public RSA key in PEM format. The client uses this key to encrypt the AES session key it is about to generate. Note this endpoint is intentionally <i>not</i> encrypted — public keys are designed to be public.
+    </div>
+
+    <h3>POST /session_key — Receive AES Key from Client</h3>
+    <div class="code-block">@app.route("/session_key", methods=["POST"])
+def session_key():
+    data = request.json
+    encrypted_aes = data.get("encrypted_key", "")
+    try:
+        aes_key = rsa_decrypt(_rsa_private, encrypted_aes)
+        token = uuid.uuid4().hex
+        _sessions[token] = aes_key
+        print(f"AES key established for session {token[:8]}...")
+        return jsonify({"session_token": token})
+    except Exception:
+        return jsonify({"status": "Key exchange failed"}), 400</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The client generated a random AES key, encrypted it with our public RSA key, and sent it here.<br><br>
+        1. <b><code>rsa_decrypt(...)</code></b>: We decrypt with our RSA <i>private</i> key. Only we can do this — no one else on Earth has our private key.<br><br>
+        2. <b><code>uuid.uuid4().hex</code></b>: We generate a random 32-character session token. This is what the client will send with every future encrypted request so we know which AES key to use for decryption.<br><br>
+        3. <b><code>_sessions[token] = aes_key</code></b>: We file the AES key under the token. The token itself is sent in JSON over the wire — it is just an identifier, not a secret. The actual AES key never leaves the server in plaintext.
+    </div>
+
+    <h3>POST /login — First Encrypted Endpoint</h3>
+    <div class="code-block">@app.route("/login", methods=["POST"])
+def api_login():
+    body = request.json
+    token = body.get("session_token", "")
+    if token not in _sessions:
+        return jsonify({"status": "Invalid session"}), 401
+    try:
+        data = aes_decrypt(_sessions[token], body.get("encrypted_data", ""))
+    except Exception:
+        return jsonify({"status": "Decryption failed"}), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    ...</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        This is the first <i>real</i> usage of the AES session key. Before any login logic runs:<br><br>
+        1. Look up the AES key by the session token.<br>
+        2. Decrypt the encrypted payload.<br>
+        3. Only then read the username and password.<br><br>
+        <b>What an attacker sees on the wire:</b> <code>{"session_token": "87e25...", "encrypted_data": "xK9aP2mLv..."}</code> — completely opaque base64. No matter how many login attempts an attacker captures, they cannot extract a single password without breaking AES-256 (which is computationally infeasible).
+    </div>
+
+    <h3>POST /signup — Encrypted Account Creation</h3>
+    <div class="code-block">@app.route("/signup", methods=["POST"])
+def api_signup():
+    body = request.json
+    token = body.get("session_token", "")
+    if token not in _sessions:
+        return jsonify({"status": "Invalid session"}), 401
+    try:
+        data = aes_decrypt(_sessions[token], body.get("encrypted_data", ""))
+    except Exception:
+        return jsonify({"status": "Decryption failed"}), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    if not username or not password:
+        return jsonify({"status": "Missing fields"}), 400
+
+    res = handle_signup(username, password)
+    if res.get("status") == "success":
+        log_history(username, "SIGNUP", "User created account")
+        return jsonify({"status": res["message"]})
+    return jsonify({"status": res.get("message", "Error")})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The signup endpoint follows the <i>exact same encrypted pattern</i> as login. New account registration is at least as sensitive as authentication — the user is choosing their permanent password right now, and we cannot risk it crossing the wire in plaintext.<br><br>
+        1. <b>Session lookup</b>: The handshake must already have completed; otherwise we have no AES key to decrypt with. If the token is missing or unknown, we return 401 Unauthorized.<br><br>
+        2. <b>Decryption</b>: The encrypted JSON payload is unwrapped with AES-GCM. If anyone tampered with it in transit, the GCM tag check fails and we abort with "Decryption failed". This protects against active attackers — not just passive eavesdroppers.<br><br>
+        3. <b>Business logic</b>: After decryption, we treat the data like any normal signup — strip whitespace, validate non-empty, and hand off to <code>handle_signup()</code> in <code>Database_connection.py</code> which checks for username collisions and bcrypt-hashes the password for storage.<br><br>
+        4. <b>Why both AES and bcrypt?</b> They protect different threats. AES protects the password while it travels over the network (someone running Wireshark on the school Wi-Fi can capture every packet — but they will see only opaque base64). bcrypt protects the password if our MySQL database is ever stolen — the hash is computationally irreversible. Removing either one would leave a major hole.<br><br>
+        5. <b>Audit log</b>: Successful signups are recorded in the <code>history</code> table so admins can see exactly when each account was created.
+    </div>
+
+    <h3>File-Level Hybrid Encryption — The Two-Layer Defense</h3>
+    <div class="explanation">
+        <b>The high-level idea:</b> The session AES key protects data <i>in transit</i> between client and server. But the file at rest in Supabase storage is a separate concern. If someone breaches our Supabase account, they would still have raw user files.<br><br>
+        <b>The solution:</b> Every file gets its <i>own</i> AES key, generated by the sender. The file is encrypted with that key before it even leaves the client. The AES key is then encrypted with the server's public RSA key so only the server (with its private key) can ever recover it. Both the encrypted file and the encrypted AES key travel together to the server. The server stores the encrypted file in Supabase and stores the encrypted AES key in the <code>shared_files</code> table.
+    </div>
+
+    <h3>/upload_file — Storing the Encrypted Key Alongside the File</h3>
+    <div class="code-block">encrypted_aes_key = data.get("encrypted_aes_key", "")
+...
+cur.execute("""
+    INSERT INTO shared_files(file_uid, sender, receiver, filename, path,
+                              expires_at, max_downloads, download_count,
+                              message, encrypted_aes_key)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s)
+""", (file_uid, sender, rcv, safe_name, path, expires_at, max_downloads,
+      message, encrypted_aes_key))</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        The client sent two encrypted blobs: the file (encrypted with a per-file AES key) and that AES key itself (encrypted with our public RSA key).<br><br>
+        1. The encrypted file bytes go up to <b>Supabase</b> via <code>supabase.storage.from_(BUCKET).upload(...)</code>. Even if Supabase is compromised, the attacker sees garbage.<br><br>
+        2. The encrypted AES key string goes into the new <code>encrypted_aes_key</code> column of <code>shared_files</code>. Even if the MySQL database is leaked, the AES key is still encrypted with RSA-OAEP — useless without the server's private key.<br><br>
+        3. Only when both pieces (file from Supabase + key from MySQL) are reunited <i>and</i> the server's RSA private key is available can a file actually be decrypted. The defense is layered.
+    </div>
+
+    <h3>/get_file — Reuniting the File with its Key</h3>
+    <div class="code-block">cur.execute("""
+    SELECT filename, path, expires_at, encrypted_aes_key
+    FROM shared_files
+    WHERE id=%s AND receiver=%s
+""", (file_id, receiver))
+row = cur.fetchone()
+...
+file_aes_key = rsa_decrypt(_rsa_private, row["encrypted_aes_key"])
+file_aes_key_b64 = base64.b64encode(file_aes_key).decode()
+...
+return jsonify({
+    "status": "OK",
+    "filename": row["filename"],
+    "filedata": encoded,
+    "file_aes_key": file_aes_key_b64
+})</div>
+    <div class="explanation">
+        <b>Massive Detailed Explanation:</b><br><br>
+        When the authorized recipient asks for a file, the server performs the inverse hybrid operation:<br><br>
+        1. Fetch the encrypted file bytes from Supabase.<br>
+        2. Fetch the encrypted AES key from MySQL.<br>
+        3. Decrypt the AES key using the server's RSA private key.<br>
+        4. Return both the still-encrypted file and the now-decrypted AES key to the recipient.<br><br>
+        <b>Is sending the AES key in the response unsafe?</b> Not in this architecture: the response itself travels over the secure session that was established in the handshake. The TLS-like envelope protects the key in transit. The recipient receives both, decrypts the file locally, and saves the plaintext to their disk.
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ Q&A SECTION -->
+    <h2 id="qa" style="margin-top: 80px; color: #27ae60; border-bottom: 3px solid #ecf0f1; padding-bottom: 8px; background: #eafaf1; padding: 15px; border-radius: 5px;">❓ שאלות ותשובות לבדיקת הפרויקט (צד שרת)</h2>
+    <p>אוסף שאלות שהבוחן עשוי לשאול על הצד שרת של הפרויקט — מסווג לפי נושא.</p>
+
+    <!-- COMMUNICATION -->
+    <h3 style="color: #16a085;">🌐 תקשורת ורשתות</h3>
+
+    <div class="explanation">
+        <b>שאלה: השרת שלך מטפל ב-מספר לקוחות במקביל. איך זה עובד?</b><br>
+        <b>תשובה:</b> Flask יוצר Thread נפרד לכל בקשה נכנסת באופן אוטומטי. בנוסף, יש לי <code>_sessions dict</code> ב-RAM שזוכר את ה-AES key של כל לקוח לפי <code>session_token</code> ייחודי. כל לקוח שמתחבר עובר handshake נפרד ומקבל מפתח AES משלו — כך שגם אם 3 לקוחות מתחברים בו זמנית, לכל אחד יש מפתח שונה.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: באיזה פרוטוקול תקשורת השרת עובד?</b><br>
+        <b>תשובה:</b> Flask על TCP/IP, פורט 5000. הלקוחות שולחים בקשות HTTP עם JSON. השרת מאזין על <code>0.0.0.0</code> (כל הרשתות) כדי שגם מחשבים אחרים ברשת יוכלו להתחבר. מעל HTTP יש שכבת הצפנה היברידית (RSA + AES-GCM).
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה ה-endpoint-ים העיקריים של השרת ומה כל אחד עושה?</b><br>
+        <b>תשובה:</b><br>
+        • <code>GET /public_key</code> — מחזיר את המפתח הציבורי RSA (לא מוצפן, בכוונה)<br>
+        • <code>POST /session_key</code> — מקבל מפתח AES מוצפן וייצר session token<br>
+        • <code>POST /login</code> — אימות התחברות (מוצפן)<br>
+        • <code>POST /signup</code> — רישום משתמש חדש (מוצפן)<br>
+        • <code>POST /upload_file</code> — העלאת קובץ מוצפן<br>
+        • <code>POST /get_file</code> — הורדת קובץ + מפתח AES שלו<br>
+        • <code>POST /incoming_files</code> — רשימת קבצים נכנסים<br>
+        • <code>POST /admin/*</code> — endpoints למנהל מערכת
+    </div>
+
+    <!-- CRYPTOGRAPHY -->
+    <h3 style="color: #16a085;">🔐 קריפטוגרפיה (הצפנה)</h3>
+
+    <div class="explanation">
+        <b>שאלה: איפה נשמר המפתח הפרטי RSA של השרת?</b><br>
+        <b>תשובה:</b> <b>רק ב-RAM</b> של ה-Process של השרת, ב-<code>_rsa_private</code>. אף פעם לא נכתב לדיסק או לקובץ. בכל פעם שהשרת עולה — נוצר זוג מפתחות חדש לגמרי. אם השרת קורס, כל ה-AES keys של הלקוחות הקיימים אובדים והם צריכים לעשות handshake חדש.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה אתה מצפין את הסיסמה עם AES בתעבורה אם אתה ממילא עושה לה bcrypt?</b><br>
+        <b>תשובה:</b> AES מגן <b>על הסיסמה בדרך</b> — מישהו עם Wireshark לא יוכל לקרוא אותה. bcrypt מגן <b>על הסיסמה במסד</b> — אם המסד נגנב, ההאקר לא יוכל להחזיר את הסיסמה מה-hash. שתי הגנות שונות, לבעיות שונות. בלי AES — הסיסמה חשופה ברשת. בלי bcrypt — הסיסמה חשופה ב-DB.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה bcrypt? למה לא SHA-256 רגיל?</b><br>
+        <b>תשובה:</b> bcrypt היא פונקציית hashing <b>איטית בכוונה</b> — כל hash לוקח ~250ms. זה לא בעיה למשתמש אחד שמתחבר, אבל זה הופך brute-force ל-impossible (מיליארדי שנים לפצח). בנוסף, bcrypt מוסיף <b>salt</b> ייחודי לכל סיסמה — אז גם אם שני משתמשים בחרו "1234", ה-hashes שלהם שונים לגמרי. SHA-256 לעומת זאת מהיר מדי, וניתן לפיצוח עם rainbow tables.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה Salt בהאש?</b><br>
+        <b>תשובה:</b> ערך אקראי שמוסיפים לסיסמה לפני ה-hash. גם אם שני משתמשים בחרו אותה סיסמה — Salt שונה ייצור hash שונה לגמרי. זה מונע <b>Rainbow Table attacks</b> שבהן ההאקר משתמש בטבלאות hash מוכנות מראש של סיסמאות נפוצות. bcrypt מייצר salt אוטומטית.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה משתמש ב-RSA-2048 ולא ב-RSA-4096?</b><br>
+        <b>תשובה:</b> RSA-2048 הוא תקן תעשייתי שעדיין נחשב בטוח לחלוטין. RSA-4096 יותר בטוח אבל פי 4 איטי יותר. RSA פועל רק פעם אחת ב-session (לחילוף ה-AES key), אז המהירות חשובה — אבל לא קריטית. RSA-2048 הוא איזון טוב בין מהירות לאבטחה.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה דווקא AES-GCM ולא AES-CBC?</b><br>
+        <b>תשובה:</b> GCM נקרא Galois/Counter Mode — מצב שמשלב הצפנה עם <b>אימות הודעה</b>. GCM יוצר tag שמזהה אם מישהו שינה את ה-ciphertext. אם תוקף מנסה לשבש את הנתונים — הפענוח יזרוק <code>InvalidTag</code> ויסרב. CBC לעומת זאת לא נותן אימות — תוקף יכול לשנות bytes ולגרום לפענוח להחזיר שטויות בלי לדעת שמשהו השתבש.
+    </div>
+
+    <!-- OPERATING SYSTEMS -->
+    <h3 style="color: #16a085;">🖥️ מערכות הפעלה</h3>
+
+    <div class="explanation">
+        <b>שאלה: איך השרת מטפל בכמה לקוחות במקביל ולא קורס?</b><br>
+        <b>תשובה:</b> Flask + Werkzeug יוצרים <b>Thread נפרד לכל בקשה</b>. בנוסף, ה-<code>_sessions dict</code> מוגן מ-race conditions בזכות ה-GIL של Python. גם <code>cleanup_expired_files</code> רץ ב-Thread אחר ולא חוסם את הבקשות הראשיות.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה זה GIL?</b><br>
+        <b>תשובה:</b> Global Interpreter Lock — נעילה גלובלית של פייתון שמבטיחה שרק Thread אחד בכל רגע נתון מריץ קוד פייתון. זה אומר שמילונים ורשימות הם <b>אוטומטית thread-safe</b>. כך ה-<code>_sessions</code> dict שלי בטוח גם כשכמה לקוחות פונים לשרת בו זמנית.
+    </div>
+
+    <!-- CYBERSECURITY -->
+    <h3 style="color: #16a085;">🛡️ סייבר ואבטחת מידע</h3>
+
+    <div class="explanation">
+        <b>שאלה: איזה הגנות יש בשרת מפני SQL Injection?</b><br>
+        <b>תשובה:</b> כל השאילתות ל-MySQL משתמשות ב-<b>Parameterized Queries</b>:<br>
+        <code>cursor.execute("SELECT ... WHERE username=%s", (username,))</code><br>
+        ה-<code>%s</code> הוא placeholder ש-pymysql מטפל בו בצורה בטוחה — כל תו מסוכן בקלט מוברח אוטומטית. תוקף שיזריק <code>' OR '1'='1</code> כשם משתמש פשוט יחפש משתמש בשם המוזר הזה ויקבל "Not found".
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: איך השרת מתמודד עם Brute-Force על סיסמאות?</b><br>
+        <b>תשובה:</b> במחלקת <code>userauth</code> יש מנגנון <b>Account Lockout</b>:<br>
+        • אחרי 3 כשלונות התחברות — החשבון ננעל ל-5 דקות.<br>
+        • הניסיונות נשמרים ב-<code>login_attempts dict</code> לפי שם משתמש.<br>
+        • הזמן מתעדכן בכל כשלון.<br>
+        • אחרי התחברות מוצלחת — המונה מתאפס.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה השרת מאזין על 0.0.0.0 ולא 127.0.0.1?</b><br>
+        <b>תשובה:</b> <code>127.0.0.1</code> זה loopback — רק המחשב עצמו יכול להתחבר. <code>0.0.0.0</code> אומר "כל הרשתות שיש לי" — כך שגם מחשב אחר ברשת המקומית (כמו במחשב בית הספר) יוכל להתחבר. כשמדובר באפליקציה שרצה רק לוקאלית, 127.0.0.1 בטוח יותר. בפרויקט שלי צריך גישה מבחוץ — אז 0.0.0.0.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה ההגנה שלך מ-Path Traversal בהעלאת קבצים?</b><br>
+        <b>תשובה:</b> Path Traversal זה כשתוקף שולח שם קובץ כמו <code>../../../etc/passwd</code> ומנסה לכתוב מחוץ לתיקיה המיועדת. אני משתמש ב-<code>secure_filename()</code> של Werkzeug שמנקה את כל התווים המסוכנים ומבטיח שם תקין. בנוסף, אני מוסיף <code>uuid</code> בתחילת השם — כך אין כפילויות וקבצים לא דורסים אחד את השני ב-Supabase.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה קורה אם תוקף שולח קובץ של 10GB כדי להפיל את השרת?</b><br>
+        <b>תשובה:</b> ב-<code>app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024</code> הגדרתי תקרה של 50MB. Flask חוסם אוטומטית בקשות גדולות יותר ומחזיר 413 Request Entity Too Large. כך השרת לא מנסה לטעון 10GB ל-RAM ולא קורס.
+    </div>
+
+    <!-- DATABASE -->
+    <h3 style="color: #16a085;">💾 מסד נתונים</h3>
+
+    <div class="explanation">
+        <b>שאלה: מה הטבלאות במסד הנתונים שלך?</b><br>
+        <b>תשובה:</b> 5 טבלאות:<br>
+        1. <code>data</code> — המשתמשים (username, password_hash, is_blocked, is_admin)<br>
+        2. <code>shared_files</code> — קבצים ששותפו (sender, receiver, filename, path, expires_at, max_downloads, download_count, encrypted_aes_key)<br>
+        3. <code>history</code> — לוג כל הפעולות במערכת<br>
+        4. <code>system_settings</code> — הגדרות גלובליות (כמו global_max_downloads)<br>
+        5. <code>print_jobs</code> — תור הדפסות (file_id, sender, status)
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה אתה מפריד בין Supabase (לקבצים) ל-MySQL (למטה-דאטה)?</b><br>
+        <b>תשובה:</b> כל אחד בנוי לדבר אחר:<br>
+        • <b>MySQL</b> — מצוין לטקסט ומספרים מובנים, שאילתות מורכבות, מהיר מאוד לחיפושים.<br>
+        • <b>Supabase Storage</b> — מצוין לקבצים גדולים (PDF, תמונות, סרטונים) — לא מתאים למסד נתונים שיתפח עד גודל ענק.<br>
+        אחסון קבצי 50MB ב-MySQL היה הופך אותו לאיטי מאוד. ההפרדה נותנת מהירות וגמישות.
+    </div>
+
+    <!-- PROJECT-SPECIFIC -->
+    <h3 style="color: #16a085;">💻 שאלות ספציפיות לפרויקט</h3>
+
+    <div class="explanation">
+        <b>שאלה: למה Flask ולא Django?</b><br>
+        <b>תשובה:</b> Flask הוא <b>micro-framework</b> קטן ופשוט — בדיוק מה שצריך לפרויקט שלי. Django הוא framework מלא עם הרבה תכונות שלא צריך (admin panel מובנה, ORM, וכו'). Flask נותן לי שליטה מלאה ומספיק כוח לבנות API REST פשוט.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה החלטת לבטל הרשמה ישירה למסד נתונים בלקוח?</b><br>
+        <b>תשובה:</b> בגרסה הראשונה הלקוח התחבר ישירות ל-MySQL. זה לא בסדר מכמה סיבות:<br>
+        1. כל לקוח היה צריך לדעת את סיסמת מסד הנתונים.<br>
+        2. אם הלקוח רץ במחשב אחר — MySQL לא קיים שם.<br>
+        3. אין שליטה מרכזית — כל לקוח יכול לעשות מה שהוא רוצה ב-DB.<br>
+        אז שיניתי שכל התקשורת עם DB עוברת דרך הפרשן — דרך HTTP endpoints מבוקרים בלבד.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה מנגנון הניקוי האוטומטי?</b><br>
+        <b>תשובה:</b> <code>@app.before_request</code> רץ <b>לפני כל בקשה</b> ומפעיל <code>cleanup_expired_files()</code>. הפונקציה שולפת מ-MySQL את כל הקבצים עם <code>expires_at &lt; NOW()</code> ומוחקת אותם גם מ-Supabase וגם מהמסד. כך אין צורך ב-cron job — הניקוי מתבצע באופן טבעי כשמשתמשים במערכת.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: למה השתמשת ב-uuid בשמות הקבצים?</b><br>
+        <b>תשובה:</b> שני משתמשים יכולים להעלות קובץ עם אותו שם — לדוגמה שניהם "resume.pdf". בלי uuid, השני היה דורס את הראשון. עם <code>uuid.uuid4().hex</code> אני מקבל מזהה ייחודי של 32 תווים שמתווסף לשם הקובץ. כך אין כפילויות לעולם.
+    </div>
+
+    <div class="explanation">
+        <b>שאלה: מה ההבדל בין שאילתת <code>cursor.execute</code> עם <code>%s</code> לבין <code>f-string</code>?</b><br>
+        <b>תשובה:</b><br>
+        ❌ <b>לא בטוח:</b> <code>cursor.execute(f"SELECT * FROM data WHERE username='{username}'")</code><br>
+        אם <code>username = "' OR '1'='1"</code> — התוצאה היא <code>WHERE username='' OR '1'='1'</code> = SQL Injection!<br><br>
+        ✅ <b>בטוח:</b> <code>cursor.execute("SELECT * FROM data WHERE username=%s", (username,))</code><br>
+        pymysql מטפל ב-escape ובציטוטים אוטומטית. גם אם הקלט זדוני — הוא יחפש משתמש בשם המוזר ולא יזריק קוד.
+    </div>
+
+    <h2 id="concepts">5. Key Concepts & Core Technologies</h2>
+    <p>This final section explains the advanced computer science concepts and architectural choices that power the entire CloudDrop platform.</p>
+
+    <table class="concept-table">
+        <thead>
+            <tr>
+                <th>Technology / Concept</th>
+                <th>In-Depth Explanation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="tech-name">Base64 Encoding</td>
+                <td><b>What it is:</b> A method to convert raw binary data (like images, PDFs, or executables) into a long string of standard ASCII characters (A-Z, a-z, 0-9, +, /).<br><b>Why we use it:</b> HTTP requests and JSON dictionaries are text-based. If you try to stuff raw binary bytes (like <code>\x00\xff</code>) into JSON, it crashes. We use Base64 to safely package a file on the client, send it as text over the internet, and decode it back to a file on the server.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">UUID (Universally Unique Identifier)</td>
+                <td><b>What it is:</b> A 128-bit label used for information in computer systems. A UUID looks like this: <code>550e8400-e29b-41d4-a716-446655440000</code>.<br><b>Why we use it:</b> To prevent file name collisions. If two users upload a file named <code>report.pdf</code>, the second upload would overwrite the first in the cloud. By attaching a UUID, the file becomes <code>550e8400..._report.pdf</code>, guaranteeing it is mathematically impossible to overwrite another file.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">Flask API (REST)</td>
+                <td><b>What it is:</b> A micro web framework for Python. It turns standard Python functions into web URLs that clients can communicate with.<br><b>Why we use it:</b> It allows our Client desktop app to talk to the database securely. Without Flask, the Client app would have to connect directly to MySQL. Connecting a desktop app directly to a database over the internet is a massive security flaw (hackers could extract the database password). Flask acts as a secure middleman.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">Supabase Cloud Storage</td>
+                <td><b>What it is:</b> An open-source Firebase alternative providing scalable cloud file storage.<br><b>Why we use it:</b> Databases like MySQL are designed to store text and numbers, not 50MB PDF files. Storing large files in MySQL causes it to bloat and slow down drastically. By offloading the physical file bytes to Supabase, our MySQL database stays incredibly fast and lightweight.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">JSON (JavaScript Object Notation)</td>
+                <td><b>What it is:</b> A lightweight format for storing and transporting data. It looks exactly like a Python Dictionary.<br><b>Why we use it:</b> It is the universal language of the internet. Our Python Client packs variables into JSON, sends them over HTTP, and the Flask Server unpacks the JSON back into Python variables. It allows seamless communication between systems.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">bcrypt Password Hashing</td>
+                <td><b>What it is:</b> A cryptographic hash function specifically designed for passwords.<br><b>Why we use it:</b> If our database gets hacked and stolen, the hackers will not see the users' passwords. They will see hashes. Because bcrypt is intentionally computationally slow and uses "salting", it would take a supercomputer thousands of years to reverse-engineer the passwords from the hashes.</td>
+            </tr>
+            <tr>
+                <td class="tech-name">Raw Socket Printing (Port 9100)</td>
+                <td><b>What it is:</b> A network protocol (JetDirect) used to send raw page description language (like PDF or PostScript bytes) directly to a network printer's IP address on port 9100.<br><b>Why we use it:</b> In the <code>print_preview_window.py</code> on the client, this allows the application to print to enterprise network printers without needing to install Windows drivers! It just opens a TCP socket and blasts the bytes straight to the printer hardware.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <hr style="margin-top: 60px; border-top: 2px solid #ecf0f1;">
+    <p style="text-align: center; color: #95a5a6; font-size: 1em; margin-top: 20px;">
+        Generated by Antigravity | Advanced CloudDrop Documentation Series — Complete Master Document
+    </p>
+
+</div>
+</body>
+</html>

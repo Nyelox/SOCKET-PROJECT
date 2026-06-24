@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SendedFilesWindow</class>
+ <widget class="QMainWindow" name="SendedFilesWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>850</width><height>600</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>CloudDrop — Sent Files</string>
+  </property>
+  <property name="minimumSize">
+   <size><width>680</width><height>500</height></size>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">
+QWidget#centralwidget {
+    background-color: white;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 11pt;
+}
+QLabel#label_title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #222;
+}
+QLabel#label_subtitle {
+    font-size: 11px;
+    color: #666;
+}
+QLabel#label_status {
+    font-size: 12px;
+    color: #666;
+}
+QGroupBox#group_files {
+    font-weight: bold;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-top: 8px;
+    padding: 10px;
+}
+QGroupBox#group_files::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: #0077ff;
+}
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollBar:vertical {
+    background: #f0f0f0;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #0077ff;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QLineEdit#input_filter {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11pt;
+}
+QScrollArea QFrame {
+    background-color: #f8fbff;
+    border: 1px solid #d0e3ff;
+    border-radius: 10px;
+}
+QScrollArea QFrame:hover {
+    background-color: #eef5ff;
+    border: 1px solid #0077ff;
+}
+QScrollArea QPushButton {
+    background-color: #0077ff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QScrollArea QPushButton:hover {
+    background-color: #3399ff;
+}
+QScrollArea QPushButton:pressed {
+    background-color: #0055cc;
+}
+QScrollArea QPushButton:disabled {
+    background-color: #ccc;
+    color: #888;
+}
+    </string>
+   </property>
+   <layout class="QVBoxLayout" name="main_layout">
+    <property name="spacing"><number>10</number></property>
+    <property name="leftMargin"><number>16</number></property>
+    <property name="topMargin"><number>12</number></property>
+    <property name="rightMargin"><number>16</number></property>
+    <property name="bottomMargin"><number>12</number></property>
+    <!-- ── Back row ───────────────────────────────── -->
+    <item>
+     <layout class="QHBoxLayout" name="layout_back">
+      <item>
+       <widget class="QPushButton" name="btn_back">
+        <property name="text"><string>← Back</string></property>
+        <property name="minimumSize"><size><width>90</width><height>34</height></size></property>
+        <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #f0f7ff;
+    color: #0077ff;
+    border: 1px solid #d0e3ff;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton:hover { background-color: #e0f0ff; }
+         </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="back_spacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <!-- ── Header row ─────────────────────────────── -->
+    <item>
+     <layout class="QHBoxLayout" name="header_layout">
+      <item>
+       <layout class="QVBoxLayout" name="title_col">
+        <property name="spacing"><number>2</number></property>
+        <item>
+         <widget class="QLabel" name="label_title">
+          <property name="text"><string>Sent Files</string></property>
+         </widget>
+        </item>
+
+       </layout>
+      </item>
+      <item>
+       <spacer name="header_spacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_upload_print">
+        <property name="text"><string>Upload File to Print</string></property>
+        <property name="minimumSize"><size><width>170</width><height>34</height></size></property>
+        <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #0077ff;
+    color: white;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #3399ff;
+}
+QPushButton:pressed {
+    background-color: #0055cc;
+}
+         </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_refresh">
+        <property name="text"><string>Refresh</string></property>
+        <property name="minimumSize"><size><width>110</width><height>34</height></size></property>
+        <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #e6f2ff;
+    color: #0077ff;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+}
+QPushButton:hover {
+    background-color: #cce6ff;
+}
+         </string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <!-- ── Separator ──────────────────────────────── -->
+    <item>
+     <widget class="QFrame" name="line_sep">
+      <property name="frameShape"><enum>QFrame::HLine</enum></property>
+      <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+     </widget>
+    </item>
+    <!-- ── Filter ─────────────────────────────────── -->
+    <item>
+     <widget class="QLineEdit" name="input_filter">
+      <property name="placeholderText"><string>Filter by filename, sender, receiver...</string></property>
+     </widget>
+    </item>
+    <!-- ── Status label ───────────────────────────── -->
+    <item>
+     <widget class="QLabel" name="label_status">
+      <property name="text"><string>Loading…</string></property>
+      <property name="alignment"><set>Qt::AlignCenter</set></property>
+     </widget>
+    </item>
+    <!-- ── Scroll area for file cards ─────────────── -->
+    <item>
+     <widget class="QScrollArea" name="scroll_area">
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="scroll_content">
+       <property name="geometry">
+        <rect><x>0</x><y>0</y><width>818</width><height>400</height></rect>
+       </property>
+       <layout class="QVBoxLayout" name="cards_layout">
+        <property name="spacing"><number>8</number></property>
+        <property name="leftMargin"><number>2</number></property>
+        <property name="rightMargin"><number>2</number></property>
+        <item>
+         <spacer name="cards_spacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
