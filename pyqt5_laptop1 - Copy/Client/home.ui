@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>350</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Home</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">
+      background-color: white;
+      font-family: Segoe UI;
+      font-size: 11pt;
+    </string>
+   </property>
+   <widget class="QPushButton" name="button_sendfile">
+    <property name="geometry">
+     <rect>
+      <x>100</x>
+      <y>130</y>
+      <width>200</width>
+      <height>45</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+       QPushButton {
+         background-color: #0077ff;
+         color: white;
+         border-radius: 10px;
+         font-size: 12pt;
+       }
+       QPushButton:hover {
+         background-color: #3399ff;
+       }
+     </string>
+    </property>
+    <property name="text">
+     <string>Send File</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="button_sendedfile">
+    <property name="geometry">
+     <rect>
+      <x>100</x>
+      <y>200</y>
+      <width>200</width>
+      <height>45</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+       QPushButton {
+         background-color: #e6f2ff;
+         color: #0077ff;
+         border-radius: 10px;
+         font-size: 12pt;
+       }
+       QPushButton:hover {
+         background-color: #cce6ff;
+       }
+     </string>
+    </property>
+    <property name="text">
+     <string>Sended Files</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label">
+    <property name="geometry">
+     <rect>
+      <x>143</x>
+      <y>20</y>
+      <width>111</width>
+      <height>91</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="pixmap">
+     <pixmap>../../cyber project/Logo project.png</pixmap>
+    </property>
+    <property name="scaledContents">
+     <bool>true</bool>
+    </property>
+    <property name="wordWrap">
+     <bool>true</bool>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>400</width>
+     <height>21</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

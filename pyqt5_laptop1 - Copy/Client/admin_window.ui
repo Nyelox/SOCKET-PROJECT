@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AdminWindow</class>
+ <widget class="QMainWindow" name="AdminWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>900</width><height>650</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>CloudDrop — Admin Dashboard</string>
+  </property>
+  <property name="minimumSize">
+   <size><width>720</width><height>520</height></size>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">
+QWidget#centralwidget {
+    background-color: white;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 11pt;
+}
+QLabel#label_title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #222;
+}
+QLabel#label_subtitle {
+    font-size: 11px;
+    color: #666;
+}
+QTabWidget::pane {
+    border: 1px solid #d0e3ff;
+    border-radius: 8px;
+    background: white;
+}
+QTabBar::tab {
+    background: #f0f7ff;
+    color: #555;
+    border: 1px solid #d0e3ff;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    padding: 7px 22px;
+    font-size: 12px;
+    min-width: 130px;
+}
+QTabBar::tab:selected {
+    background: white;
+    color: #0077ff;
+    font-weight: bold;
+    border-bottom: 2px solid white;
+}
+QTabBar::tab:hover:!selected {
+    background: #e0f0ff;
+}
+QTableWidget {
+    background: white;
+    border: 1px solid #d0e3ff;
+    border-radius: 8px;
+    gridline-color: #eef3ff;
+    font-size: 12px;
+    color: #222;
+    selection-background-color: #d0e3ff;
+    selection-color: #222;
+}
+QTableWidget::item {
+    padding: 4px 8px;
+}
+QHeaderView::section {
+    background-color: #f0f7ff;
+    color: #0077ff;
+    font-weight: bold;
+    font-size: 12px;
+    border: none;
+    border-bottom: 1px solid #d0e3ff;
+    padding: 6px 8px;
+}
+QScrollBar:vertical {
+    background: #f0f0f0;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #0077ff;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: #f0f0f0;
+    height: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal {
+    background: #0077ff;
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+QComboBox {
+    background: #f8fbff;
+    color: #222;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+QComboBox QAbstractItemView {
+    background: white;
+    color: #222;
+    selection-background-color: #0077ff;
+    border: 1px solid #ccc;
+}
+QLabel#label_filter {
+    font-size: 12px;
+    color: #555;
+}
+    </string>
+   </property>
+   <layout class="QVBoxLayout" name="main_layout">
+    <property name="spacing"><number>10</number></property>
+    <property name="leftMargin"><number>16</number></property>
+    <property name="topMargin"><number>12</number></property>
+    <property name="rightMargin"><number>16</number></property>
+    <property name="bottomMargin"><number>12</number></property>
+    <!-- ── Back row ───────────────────────────────── -->
+    <item>
+     <layout class="QHBoxLayout" name="layout_back">
+      <item>
+       <widget class="QPushButton" name="btn_back">
+        <property name="text"><string>← Back</string></property>
+        <property name="minimumSize"><size><width>90</width><height>34</height></size></property>
+        <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #f0f7ff;
+    color: #0077ff;
+    border: 1px solid #d0e3ff;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton:hover { background-color: #e0f0ff; }
+         </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="back_spacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <!-- ── Header row ─────────────────────────────── -->
+    <item>
+     <layout class="QHBoxLayout" name="header_layout">
+      <item>
+       <layout class="QVBoxLayout" name="title_col">
+        <property name="spacing"><number>2</number></property>
+        <item>
+         <widget class="QLabel" name="label_title">
+          <property name="text"><string>Admin Dashboard</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_subtitle">
+          <property name="text"><string>Manage users and view activity history</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <spacer name="header_spacer">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <!-- ── Separator ──────────────────────────────── -->
+    <item>
+     <widget class="QFrame" name="line_sep">
+      <property name="frameShape"><enum>QFrame::HLine</enum></property>
+      <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+     </widget>
+    </item>
+    <!-- ── Tab Widget ─────────────────────────────── -->
+    <item>
+     <widget class="QTabWidget" name="tab_widget">
+      <!-- ── Users Tab ──────────────────────────── -->
+      <widget class="QWidget" name="users_tab">
+       <attribute name="title"><string>Users Management</string></attribute>
+       <layout class="QVBoxLayout" name="users_layout">
+        <property name="spacing"><number>10</number></property>
+        <property name="leftMargin"><number>10</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="rightMargin"><number>10</number></property>
+        <property name="bottomMargin"><number>10</number></property>
+        <item>
+         <widget class="QTableWidget" name="users_table">
+          <property name="columnCount"><number>3</number></property>
+          <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+          <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
+          <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+          <property name="alternatingRowColors"><bool>false</bool></property>
+          <attribute name="horizontalHeaderStretchLastSection"><bool>true</bool></attribute>
+          <column><property name="text"><string>Username</string></property></column>
+          <column><property name="text"><string>Is Blocked</string></property></column>
+          <column><property name="text"><string>Is Admin</string></property></column>
+         </widget>
+        </item>
+        <!-- ── Button row ─────────────────── -->
+        <item>
+         <layout class="QHBoxLayout" name="users_btn_layout">
+          <property name="spacing"><number>8</number></property>
+          <item>
+           <widget class="QPushButton" name="btn_block">
+            <property name="text"><string>Block Selected</string></property>
+            <property name="minimumSize"><size><width>130</width><height>34</height></size></property>
+            <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+            <property name="styleSheet">
+             <string notr="true">
+QPushButton {
+    background-color: #ff4d4d;
+    color: white;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton:hover { background-color: #ff7070; }
+QPushButton:pressed { background-color: #cc0000; }
+             </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_unblock">
+            <property name="text"><string>Unblock Selected</string></property>
+            <property name="minimumSize"><size><width>140</width><height>34</height></size></property>
+            <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+            <property name="styleSheet">
+             <string notr="true">
+QPushButton {
+    background-color: #00bb55;
+    color: white;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton:hover { background-color: #00dd66; }
+QPushButton:pressed { background-color: #008833; }
+             </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="users_btn_spacer">
+            <property name="orientation"><enum>Qt::Horizontal</enum></property>
+            <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_refresh_users">
+            <property name="text"><string>Refresh</string></property>
+            <property name="minimumSize"><size><width>110</width><height>34</height></size></property>
+            <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+            <property name="styleSheet">
+             <string notr="true">
+QPushButton {
+    background-color: #e6f2ff;
+    color: #0077ff;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+}
+QPushButton:hover { background-color: #cce6ff; }
+             </string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <!-- ── History Tab ─────────────────────────── -->
+      <widget class="QWidget" name="history_tab">
+       <attribute name="title"><string>User History</string></attribute>
+       <layout class="QVBoxLayout" name="history_layout">
+        <property name="spacing"><number>10</number></property>
+        <property name="leftMargin"><number>10</number></property>
+        <property name="topMargin"><number>12</number></property>
+        <property name="rightMargin"><number>10</number></property>
+        <property name="bottomMargin"><number>10</number></property>
+        <!-- Controls row -->
+        <item>
+         <layout class="QHBoxLayout" name="history_ctrl_layout">
+          <property name="spacing"><number>8</number></property>
+          <item>
+           <widget class="QLabel" name="label_filter">
+            <property name="text"><string>Filter by User:</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_users">
+            <property name="minimumSize"><size><width>180</width><height>32</height></size></property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch><verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="history_ctrl_spacer">
+            <property name="orientation"><enum>Qt::Horizontal</enum></property>
+            <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_refresh_history">
+            <property name="text"><string>Refresh History</string></property>
+            <property name="minimumSize"><size><width>130</width><height>34</height></size></property>
+            <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+            <property name="styleSheet">
+             <string notr="true">
+QPushButton {
+    background-color: #e6f2ff;
+    color: #0077ff;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+}
+QPushButton:hover { background-color: #cce6ff; }
+             </string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <!-- History Table -->
+        <item>
+         <widget class="QTableWidget" name="history_table">
+          <property name="columnCount"><number>4</number></property>
+          <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+          <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+          <property name="alternatingRowColors"><bool>false</bool></property>
+          <attribute name="horizontalHeaderStretchLastSection"><bool>true</bool></attribute>
+          <column><property name="text"><string>Time</string></property></column>
+          <column><property name="text"><string>User</string></property></column>
+          <column><property name="text"><string>Action</string></property></column>
+          <column><property name="text"><string>Details</string></property></column>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
